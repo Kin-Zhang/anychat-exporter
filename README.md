@@ -2,7 +2,7 @@
 
 <div align="center">
 
-A GreasyFork script to export the chat history of [ChatGPT](https://chat.openai.com/), [Claude](https://claude.ai/), and [Gemini](https://gemini.google.com/) in various formats, including Text, HTML, Markdown, PNG, and JSON.
+A GreasyFork script to export the chat history of [ChatGPT](https://chat.openai.com/), [Claude](https://claude.ai/), and [Gemini](https://gemini.google.com/) in various formats, including Text, HTML, Markdown, PNG, and JSON. Repo modified from [ChatGPT Exporter](https://github.com/pionxzh/chatgpt-exporter).
 
 <!-- [![license][license-image]][license-url]
 [![release][release-image]][release-url]
@@ -38,8 +38,7 @@ A GreasyFork script to export the chat history of [ChatGPT](https://chat.openai.
 | [![Install][Install-1-image]][install-1-url] | [![Install][Install-2-image]][install-2-url] |
 
 [Install-1-image]: https://img.shields.io/badge/-Install-blue
-[Install-1-url]: https://github.com/Kin-Zhang/anychat-exporter/raw/refs/heads/master/dist/anychat-exporter.user.js
-<!-- todo update this -->
+[Install-1-url]: https://greasyfork.org/en/scripts/570035-anychat-exporter
 [Install-2-image]: https://img.shields.io/badge/-Install-blue
 [Install-2-url]: https://github.com/Kin-Zhang/anychat-exporter/raw/refs/heads/master/dist/anychat-exporter.user.js
 
