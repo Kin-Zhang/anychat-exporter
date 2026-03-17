@@ -1,21 +1,21 @@
-<h1 align="center">ChatGPT Exporter</h1>
+<h1 align="center">AnyChat Exporter</h1>
 
 <div align="center">
 
-## A GreasyFork script to export the chat history of [ChatGPT](https://chatgpt.com/)
+A GreasyFork script to export the chat history of [ChatGPT](https://chat.openai.com/), [Claude](https://claude.ai/), and [Gemini](https://gemini.google.com/) in various formats, including Text, HTML, Markdown, PNG, and JSON.
 
-[![license][license-image]][license-url]
+<!-- [![license][license-image]][license-url]
 [![release][release-image]][release-url]
-[![GreasyFork][GreasyFork-image]][GreasyFork-url]
+[![GreasyFork][GreasyFork-image]][GreasyFork-url] -->
 
-[license-image]: https://img.shields.io/github/license/pionxzh/chatgpt-exporter?color=red
+<!-- [license-image]: https://img.shields.io/github/license/pionxzh/chatgpt-exporter?color=red
 [license-url]: https://github.com/pionxzh/chatgpt-exporter/blob/master/LICENSE
 [release-image]: https://img.shields.io/github/v/release/pionxzh/chatgpt-exporter?color=blue
 [release-url]: https://github.com/pionxzh/chatgpt-exporter/releases/latest
 [GreasyFork-image]: https://img.shields.io/static/v1?label=%20&message=GreasyFork&style=flat-square&labelColor=7B0000&color=960000&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH3ggEBCQHM3fXsAAAAVdJREFUOMudkz2qwkAUhc/goBaGJBgUtBCZyj0ILkpwAW7Bws4yO3AHLiCtEFD8KVREkoiFxZzX5A2KGfN4F04zMN+ce+5c4LMUgDmANYBnrnV+plBSi+FwyHq9TgA2LQpvCiEiABwMBtzv95RSfoNEHy8DYBzHrNVqVEr9BWKcqNFoxF6vx3a7zc1mYyC73a4MogBg7vs+z+czO50OW60Wt9stK5UKp9Mpj8cjq9WqDTBHnjAdxzGQZrPJw+HA31oulzbAWgLoA0CWZVBKIY5jzGYzdLtdE9DlcrFNrY98zobqOA6TJKHW2jg4nU5sNBpFDp6mhVe5rsvVasUwDHm9Xqm15u12o+/7Hy0gD8KatOd5vN/v1FozTVN6nkchxFuI6hsAAIMg4OPxMJCXdtTbR7JJCMEgCJhlGUlyPB4XfumozInrupxMJpRSRtZlKoNYl+m/6/wDuWAjtPfsQuwAAAAASUVORK5CYII=
-[GreasyFork-url]: https://greasyfork.org/scripts/456055-chatgpt-exporter
+[GreasyFork-url]: https://greasyfork.org/scripts/456055-chatgpt-exporter -->
 
-English &nbsp;&nbsp;|&nbsp;&nbsp; [Français](./README_FR.md) &nbsp;&nbsp;|&nbsp;&nbsp; [Indonesia](./README_ID.md) &nbsp;&nbsp;|&nbsp;&nbsp; [한국어](./README_KR.md) &nbsp;&nbsp;|&nbsp;&nbsp; [Türkçe](./README_TR.md)
+<!-- English &nbsp;&nbsp;|&nbsp;&nbsp; [Français](./README_FR.md) &nbsp;&nbsp;|&nbsp;&nbsp; [Indonesia](./README_ID.md) &nbsp;&nbsp;|&nbsp;&nbsp; [한국어](./README_KR.md) &nbsp;&nbsp;|&nbsp;&nbsp; [Türkçe](./README_TR.md) -->
 
 ![image](https://github.com/pionxzh/chatgpt-exporter/assets/9910706/1c864670-7912-4484-b4be-bdf5dde51557)
 
@@ -31,7 +31,7 @@ English &nbsp;&nbsp;|&nbsp;&nbsp; [Français](./README_FR.md) &nbsp;&nbsp;|&nbsp
 [link-firefox]: https://addons.mozilla.org/firefox/addon/tampermonkey 'Firefox Add-ons'
 [link-edge]: https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd 'Edge Add-ons'
 
-### UserScript
+<!-- ### UserScript
 
 | Greasyfork                                                                        | GitHub                                                                                       |
 | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
@@ -40,7 +40,7 @@ English &nbsp;&nbsp;|&nbsp;&nbsp; [Français](./README_FR.md) &nbsp;&nbsp;|&nbsp
 [Install-1-image]: https://img.shields.io/badge/-Install-blue
 [Install-1-url]: https://greasyfork.org/scripts/456055-chatgpt-exporter
 [Install-2-image]: https://img.shields.io/badge/-Install-blue
-[Install-2-url]: https://raw.githubusercontent.com/pionxzh/chatgpt-exporter/master/dist/chatgpt.user.js
+[Install-2-url]: https://raw.githubusercontent.com/pionxzh/chatgpt-exporter/master/dist/chatgpt.user.js -->
 
 #
 
@@ -219,7 +219,7 @@ the raw content from API `https://chat.openai.com/backend-api/conversation/[id]`
 ```
 </details>
 
-## 📤 Export Multiple Conversations
+<!-- ## 📤 Export Multiple Conversations
 
 When you click the "Export All" button, the **Export Conversations** dialog pops up. Here are the functions you can access.
 
@@ -242,9 +242,9 @@ Click the button to perform the action you want.
 
 - **Archive** -  Archived chat sessions will disappear from the sidebar and can be managed in ChatGPT settings. See [#199](https://github.com/pionxzh/chatgpt-exporter/issues/199) for more details.
 - **Delete** - Deletes the selected conversations.
-- **Export** - Exports the selected conversations in the format chosen using the format selector.
+- **Export** - Exports the selected conversations in the format chosen using the format selector. -->
 
-## 🤝 Contribution
+<!-- ## 🤝 Contribution
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md)
 
@@ -254,4 +254,4 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md)
 
 <img src="https://api.star-history.com/svg?repos=pionxzh/chatgpt-exporter&type=Date" width="600" height="400" alt="Star History Chart" valign="middle">
 
-</div>
+</div> -->

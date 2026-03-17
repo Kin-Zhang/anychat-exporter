@@ -30,10 +30,11 @@ html {
     --ce-border-light: var(--border-light, rgba(0, 0, 0, .1));
 }
 
-.dark {
+.dark, .dark-theme {
     --ce-text-primary: var(--text-primary, #ececec);
     --ce-menu-primary: var(--sidebar-surface-primary, #171717);
     --ce-menu-secondary: var(--sidebar-surface-secondary, #212121);
+    --ce-border-light: var(--border-light, rgba(255, 255, 255, .1));
 }
 
 .text-menu {

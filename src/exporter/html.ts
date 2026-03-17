@@ -1,8 +1,8 @@
 import JSZip from 'jszip'
-import { fetchConversation, getCurrentChatId, processConversation } from '../api'
+import { processConversation } from '../api'
 import { KEY_TIMESTAMP_24H, KEY_TIMESTAMP_ENABLED, KEY_TIMESTAMP_HTML, baseUrl } from '../constants'
 import i18n from '../i18n'
-import { checkIfConversationStarted, getUserAvatar } from '../page'
+import { checkIfConversationStarted, fetchCurrentConversation, getUserAvatar } from '../platforms/service'
 import templateHtml from '../template.html?raw'
 import { buildZipFileName, downloadFile, getFileNameWithFormat } from '../utils/download'
 import { fromMarkdown, toHtml } from '../utils/markdown'
@@ -20,12 +20,10 @@ export async function exportToHtml(fileNameFormat: string, metaList: ExportMeta[
 
     const userAvatar = await getUserAvatar()
 
-    const chatId = await getCurrentChatId()
-    const rawConversation = await fetchConversation(chatId, true)
-    const conversation = processConversation(rawConversation)
+    const conversation = await fetchCurrentConversation()
     const html = conversationToHtml(conversation, userAvatar, metaList)
 
-    const fileName = getFileNameWithFormat(fileNameFormat, 'html', { title: conversation.title, chatId, createTime: conversation.createTime, updateTime: conversation.updateTime })
+    const fileName = getFileNameWithFormat(fileNameFormat, 'html', { title: conversation.title, chatId: conversation.id, createTime: conversation.createTime, updateTime: conversation.updateTime })
     downloadFile(fileName, 'text/html', standardizeLineBreaks(html))
 
     return true

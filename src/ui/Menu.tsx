@@ -89,7 +89,7 @@ function MenuInner({ container }: { container: HTMLDivElement }) {
                 open={open}
                 onOpenChange={setOpen}
             >
-                <HoverCard.Trigger>
+                <HoverCard.Trigger asChild>
                     <MenuItem
                         className="mt-1"
                         text={t('ExportHelper')}
@@ -117,6 +117,7 @@ function MenuInner({ container }: { container: HTMLDivElement }) {
                             width: isMobile ? 316 : 268,
                             left: -6,
                             bottom: 0,
+                            zIndex: 9999,
                         }}
                         sideOffset={isMobile ? 0 : 8}
                         side={isMobile ? 'bottom' : 'right'}

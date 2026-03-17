@@ -1,6 +1,5 @@
-import { fetchConversation, getCurrentChatId, processConversation } from '../api'
 import i18n from '../i18n'
-import { checkIfConversationStarted } from '../page'
+import { checkIfConversationStarted, fetchCurrentConversation } from '../platforms/service'
 import { copyToClipboard } from '../utils/clipboard'
 import { flatMap, fromMarkdown, toMarkdown } from '../utils/markdown'
 import { standardizeLineBreaks } from '../utils/text'
@@ -13,12 +12,7 @@ export async function exportToText() {
         return false
     }
 
-    const chatId = await getCurrentChatId()
-    // All image in text output will be replaced with `[image]`
-    // So we don't need to waste time to download them
-    const rawConversation = await fetchConversation(chatId, false)
-
-    const { conversationNodes } = processConversation(rawConversation)
+    const { conversationNodes } = await fetchCurrentConversation()
     const text = conversationNodes
         .map(({ message }) => transformMessage(message))
         .filter(Boolean)

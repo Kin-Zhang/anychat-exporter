@@ -1,6 +1,7 @@
 import html2canvas from 'html2canvas'
 import i18n from '../i18n'
-import { checkIfConversationStarted, getChatIdFromUrl } from '../page'
+import { getChatIdFromUrl } from '../page'
+import { checkIfConversationStarted } from '../platforms/service'
 import { downloadUrl, getFileNameWithFormat } from '../utils/download'
 import { Effect } from '../utils/effect'
 import { sleep } from '../utils/utils'
@@ -18,55 +19,82 @@ export async function exportToPng(fileNameFormat: string) {
 
     const effect = new Effect()
 
-    const thread = document.querySelector('#thread div:has(> [data-testid="conversation-turn-1"]')
+    let thread = document.querySelector('#thread div:has(> [data-testid="conversation-turn-1"])')
+    let isClaude = false
+
+    if (!thread) {
+        const claudeMessages = document.querySelectorAll('[data-test-render-count]')
+        if (claudeMessages.length > 0) {
+            thread = claudeMessages[0].parentElement
+            isClaude = true
+        }
+    }
+
     if (!thread || thread.children.length === 0 || thread.scrollHeight < 50) {
         alert(i18n.t('Failed to export to PNG. Failed to find the element node.'))
         return false
     }
 
-    const isDarkMode = document.documentElement.classList.contains('dark')
+    const isDarkMode = document.documentElement.classList.contains('dark') || document.documentElement.getAttribute('data-mode') === 'dark'
 
     effect.add(() => {
         const style = document.createElement('style')
-        style.textContent = `
-            #thread div:has(> [data-testid="conversation-turn-1"]),
-            #thread [data-testid^="conversation-turn-"] {
-                color: ${isDarkMode ? '#ececec' : '#0d0d0d'};
-                background-color: ${isDarkMode ? '#212121' : '#fff'};
-            }
 
-            /* https://github.com/niklasvh/html2canvas/issues/2775#issuecomment-1204988157 */
-            img {
-                display: initial !important;
-            }
-
-            pre {
-                margin-top: 8px !important;
-            }
-
-            pre > div > div > span {
-                margin-top: -12px;
-                padding-bottom: 2px;
-            }
-
-            #page-header,
-            #thread-bottom-container,
-            /* any other elements that are not conversation turns */
-            #thread div:has(> [data-testid="conversation-turn-1"]) > :not([data-testid^="conversation-turn-"]),
-            /* hide back to top button */
-            button.absolute,
-            /* question button */
-            .group.absolute > button {
-                display: none;
-            }
-
-            /* conversation action bar */
-            .group\\/conversation-turn > div > div.absolute,
-            /* code block buttons */
-            #thread pre button {
-                visibility: hidden;
-            }
+        if (isClaude) {
+            style.textContent = `
+                /* ensure background is not transparent */
+                div:has(> [data-test-render-count]) {
+                    background-color: ${getComputedStyle(document.body).backgroundColor || (isDarkMode ? '#2d2d2d' : '#f9f9f9')};
+                }
+                
+                /* hide action bar */
+                div[aria-label="Message actions"] {
+                    display: none;
+                }
             `
+        }
+        else {
+            style.textContent = `
+                #thread div:has(> [data-testid="conversation-turn-1"]),
+                #thread [data-testid^="conversation-turn-"] {
+                    color: ${isDarkMode ? '#ececec' : '#0d0d0d'};
+                    background-color: ${isDarkMode ? '#212121' : '#fff'};
+                }
+
+                /* https://github.com/niklasvh/html2canvas/issues/2775#issuecomment-1204988157 */
+                img {
+                    display: initial !important;
+                }
+
+                pre {
+                    margin-top: 8px !important;
+                }
+
+                pre > div > div > span {
+                    margin-top: -12px;
+                    padding-bottom: 2px;
+                }
+
+                #page-header,
+                #thread-bottom-container,
+                /* any other elements that are not conversation turns */
+                #thread div:has(> [data-testid="conversation-turn-1"]) > :not([data-testid^="conversation-turn-"]),
+                /* hide back to top button */
+                button.absolute,
+                /* question button */
+                .group.absolute > button {
+                    display: none;
+                }
+
+                /* conversation action bar */
+                .group\\/conversation-turn > div > div.absolute,
+                /* code block buttons */
+                #thread pre button {
+                    visibility: hidden;
+                }
+            `
+        }
+
         thread!.appendChild(style)
         return () => style.remove()
     })
@@ -96,7 +124,7 @@ export async function exportToPng(fileNameFormat: string) {
         }
         catch (error) {
             // eslint-disable-next-line no-console
-            console.log(`ChatGPT Exporter:takeScreenshot with height=${height} width=${width} scale=${scale}`)
+            console.warn(`ChatGPT Exporter:takeScreenshot with height=${height} width=${width} scale=${scale}`)
             console.error('Failed to take screenshot', error)
         }
 
@@ -131,8 +159,12 @@ export async function exportToPng(fileNameFormat: string) {
         return false
     }
 
-    const chatId = getChatIdFromUrl() || undefined
-    const fileName = getFileNameWithFormat(fileNameFormat, 'png', { chatId })
+    let chatId = getChatIdFromUrl()
+    if (!chatId && isClaude) {
+        chatId = location.pathname.match(/\/chat\/([a-z0-9-]+)/i)?.[1] || null
+    }
+
+    const fileName = getFileNameWithFormat(fileNameFormat, 'png', { chatId: chatId || undefined })
     downloadUrl(fileName, dataUrl)
     window.URL.revokeObjectURL(dataUrl)
 

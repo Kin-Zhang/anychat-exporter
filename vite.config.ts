@@ -63,12 +63,21 @@ export default defineConfig({
                     'https://new.oaifree.com/gpts/*',
                     'https://new.oaifree.com/share/*',
                     'https://new.oaifree.com/share/*/continue',
+
+                    // Claude.ai — all chat pages
+                    'https://claude.ai/',
+                    'https://claude.ai/chat/*',
+                    'https://claude.ai/new',
+
+                    // Google Gemini
+                    'https://gemini.google.com/',
+                    'https://gemini.google.com/app/*',
                 ],
                 'icon': 'https://chat.openai.com/favicon.ico',
                 'run-at': 'document-end',
             },
             build: {
-                fileName: 'chatgpt.user.js',
+                fileName: 'multi-ai-exporter.user.js',
                 externalGlobals: [
                     ['jszip', cdn.jsdelivr('JSZip', 'dist/jszip.min.js')],
                     ['html2canvas', cdn.jsdelivr('html2canvas', 'dist/html2canvas.min.js')],

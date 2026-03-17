@@ -44,7 +44,7 @@
             function isOnlyContent(parent, element) {
                 let onlyKaTeX = true;
                 parent.childNodes.forEach(function(child) {
-                    console.log(child.textContent);
+                    console.warn(child.textContent);
                     if (child !== element) {
                         if (child.nodeType === Node.TEXT_NODE) {
                             if (child.textContent.trim().length > 0) {
@@ -575,7 +575,7 @@
             </h1>
             <div class="conversation-export">
                 <p>Exported by
-                <a href="https://github.com/pionxzh/chatgpt-exporter.git">ChatGPT Exporter</a>
+                <a href="https://github.com/kin-zhang/anychat-exporter.git">AnyChat Exporter</a>
                 at {{time}}</p>
             </div>
             {{details}}
