@@ -1,84 +1,83 @@
-<h1 align="center">AnyChat Exporter</h1>
+<h1 align="center">ChatGPT Exporter</h1>
 
 <div align="center">
 
-A GreasyFork script to export the chat history of [ChatGPT](https://chat.openai.com/), [Claude](https://claude.ai/), and [Gemini](https://gemini.google.com/) in various formats, including Text, HTML, Markdown, PNG, and JSON.
+## Skrip GreasyFork untuk mengekspor riwayat percakapan [ChatGPT](https://chatgpt.com/)
 
-<!-- [![license][license-image]][license-url]
+[![license][license-image]][license-url]
 [![release][release-image]][release-url]
-[![GreasyFork][GreasyFork-image]][GreasyFork-url] -->
+[![GreasyFork][GreasyFork-image]][GreasyFork-url]
 
-<!-- [license-image]: https://img.shields.io/github/license/pionxzh/chatgpt-exporter?color=red
+[license-image]: https://img.shields.io/github/license/pionxzh/chatgpt-exporter?color=red
 [license-url]: https://github.com/pionxzh/chatgpt-exporter/blob/master/LICENSE
 [release-image]: https://img.shields.io/github/v/release/pionxzh/chatgpt-exporter?color=blue
 [release-url]: https://github.com/pionxzh/chatgpt-exporter/releases/latest
 [GreasyFork-image]: https://img.shields.io/static/v1?label=%20&message=GreasyFork&style=flat-square&labelColor=7B0000&color=960000&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH3ggEBCQHM3fXsAAAAVdJREFUOMudkz2qwkAUhc/goBaGJBgUtBCZyj0ILkpwAW7Bws4yO3AHLiCtEFD8KVREkoiFxZzX5A2KGfN4F04zMN+ce+5c4LMUgDmANYBnrnV+plBSi+FwyHq9TgA2LQpvCiEiABwMBtzv95RSfoNEHy8DYBzHrNVqVEr9BWKcqNFoxF6vx3a7zc1mYyC73a4MogBg7vs+z+czO50OW60Wt9stK5UKp9Mpj8cjq9WqDTBHnjAdxzGQZrPJw+HA31oulzbAWgLoA0CWZVBKIY5jzGYzdLtdE9DlcrFNrY98zobqOA6TJKHW2jg4nU5sNBpFDp6mhVe5rsvVasUwDHm9Xqm15u12o+/7Hy0gD8KatOd5vN/v1FozTVN6nkchxFuI6hsAAIMg4OPxMJCXdtTbR7JJCMEgCJhlGUlyPB4XfumozInrupxMJpRSRtZlKoNYl+m/6/wDuWAjtPfsQuwAAAAASUVORK5CYII=
-[GreasyFork-url]: https://greasyfork.org/scripts/456055-chatgpt-exporter -->
+[GreasyFork-url]: https://greasyfork.org/scripts/456055-chatgpt-exporter
 
-<!-- English &nbsp;&nbsp;|&nbsp;&nbsp; [Français](./README_FR.md) &nbsp;&nbsp;|&nbsp;&nbsp; [Indonesia](./README_ID.md) &nbsp;&nbsp;|&nbsp;&nbsp; [한국어](./README_KR.md) &nbsp;&nbsp;|&nbsp;&nbsp; [Türkçe](./README_TR.md) -->
+[English](./README.md) &nbsp;&nbsp;|&nbsp;&nbsp; [Français](./README_FR.md) &nbsp;&nbsp;|&nbsp;&nbsp; Indonesia &nbsp;&nbsp;|&nbsp;&nbsp; [한국어](./README_KR.md) &nbsp;&nbsp;|&nbsp;&nbsp; [Türkçe](./README_TR.md)
 
-![image](docs/demo.png)
+![image](https://github.com/pionxzh/chatgpt-exporter/assets/9910706/0697599c-2432-4eae-bc6a-ea4b6ecf89aa)
 
-## Install
+## Instalasi
 
-### Prerequisites
+### Prasyarat
 
-<align>Install <b>`Tampermonkey`</b></align>
+<align>Instal <b>`Tampermonkey`</b></align>
 
 [<img src="https://user-images.githubusercontent.com/3750161/214147732-c75e96a4-48a4-4b64-b407-c2402e899a75.PNG" height="60" alt="Chrome" valign="middle">][link-chrome] &nbsp;&nbsp; [<img src="https://user-images.githubusercontent.com/3750161/214148610-acdef778-753e-470e-8765-6cc97bca85ed.png" height="60" alt="Firefox" valign="middle">][link-firefox] &nbsp;&nbsp; [<img src="https://user-images.githubusercontent.com/3750161/233201810-d1026855-0482-44c8-b1ec-c7247134473e.png" height="60" alt="Chrome" valign="middle">][link-edge]
 
-[link-chrome]: https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo 'Chrome Web Store'
-[link-firefox]: https://addons.mozilla.org/firefox/addon/tampermonkey 'Firefox Add-ons'
-[link-edge]: https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd 'Edge Add-ons'
+[link-chrome]: https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo 'Web Store Chrome'
+[link-firefox]: https://addons.mozilla.org/firefox/addon/tampermonkey 'Add-ons Firefox'
+[link-edge]: https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd 'Add-ons Edge'
 
 ### UserScript
 
 | Greasyfork                                                                        | GitHub                                                                                       |
 | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| [![Install][Install-1-image]][install-1-url] | [![Install][Install-2-image]][install-2-url] |
+| [![Install][Install-1-image]][Install-1-url] | [![Install][Install-2-image]][Install-2-url] |
 
 [Install-1-image]: https://img.shields.io/badge/-Install-blue
-[Install-1-url]: https://github.com/Kin-Zhang/anychat-exporter/raw/refs/heads/master/dist/anychat-exporter.user.js
-<!-- todo update this -->
+[Install-1-url]: https://greasyfork.org/scripts/456055-chatgpt-exporter
 [Install-2-image]: https://img.shields.io/badge/-Install-blue
-[Install-2-url]: https://github.com/Kin-Zhang/anychat-exporter/raw/refs/heads/master/dist/anychat-exporter.user.js
+[Install-2-url]: https://raw.githubusercontent.com/pionxzh/chatgpt-exporter/master/dist/chatgpt.user.js
 
 #
 
-[📚 Supported Formats](#-supported-formats) &nbsp;&nbsp;|&nbsp;&nbsp; [💡 Example](#-example) &nbsp;&nbsp;|&nbsp;&nbsp; [📤 Export Multiple Conversations](#-export-multiple-conversations) &nbsp;&nbsp;|&nbsp;&nbsp; [🤝 Contribution](#-contribution) &nbsp;&nbsp;|&nbsp;&nbsp; [⭐ Star History](#-star-history)
+[📚 Format yang Didukung](#-format-yang-didukung) &nbsp;&nbsp;|&nbsp;&nbsp; [💡 Contoh](#-contoh) &nbsp;&nbsp;|&nbsp;&nbsp; [📤 Ekspor Beberapa Percakapan](#-ekspor-beberapa-percakapan) &nbsp;&nbsp;|&nbsp;&nbsp; [🤝 Kontribusi](#-kontribusi) &nbsp;&nbsp;|&nbsp;&nbsp; [⭐ Sejarah Bintang](#-sejarah-bintang)
 
 </div>
 
 #
 
-## 📚 Supported Formats
+## 📚 Format yang Didukung
 
-- [Text](#text)
+- [Teks](#teks)
 - [HTML](#html)
 - [Markdown](#markdown)
-- [PNG](#screenshot)
+- [PNG](#tangkapan-layar)
 - [JSON](#json)
 
-## 💡 Example
+## 💡 Contoh
 
-### Text
+### Teks
 
 ```
-You:
-I'm creating a ChatGPT Exporter. What do you think?
+Anda:
+Saya sedang membuat ChatGPT Exporter. Apa pendapat Anda?
 
 ChatGPT:
-It sounds like you're planning on creating a tool that uses the ChatGPT model
-to export text. ChatGPT is a large language model trained by OpenAI that is
-designed to generate human-like text responses based on a given input. It can
-be used for a variety of applications, such as chatbots, automated responses
-to customer inquiries, and more.
+Sepertinya Anda berencana membuat alat yang menggunakan model ChatGPT
+untuk mengekspor teks. ChatGPT adalah model bahasa yang besar yang dilatih oleh OpenAI
+yang dirancang untuk menghasilkan teks yang mirip dengan manusia berdasarkan input yang diberikan.
+Model ini dapat digunakan untuk berbagai aplikasi, seperti chatbot,
+respon otomatis terhadap pertanyaan pelanggan, dan lain-lain.
 
-However, please keep in mind that as a large language model, ChatGPT has not
-been specifically trained for any specific task, so the quality of the
-generated text will depend on how it is used and the context in which it is
-applied. It's important to use ChatGPT responsibly and consider the potential
-consequences of using it in any given situation.
+Namun, perlu diingat bahwa sebagai model bahasa yang besar, ChatGPT tidak
+telah dilatih secara khusus untuk tugas tertentu, sehingga kualitas teks yang
+dihasilkan akan bergantung pada bagaimana penggunaannya dan konteks di mana
+ini diterapkan. Penting untuk menggunakan ChatGPT dengan tanggung jawab dan
+mempertimbangkan konsekuensi potensial penggunaannya dalam situasi apa pun.
 ```
 
 ### HTML
@@ -101,25 +100,36 @@ author: ChatGPT
 # ChatGPT Exporter Creation
 
 #### You:
-I'm creating a ChatGPT Exporter. What do you think?
+Saya sedang membuat ChatGPT Exporter. Apa pendapat Anda?
 
 #### ChatGPT:
-It sounds like you're planning on creating a tool that uses the ChatGPT model to export text. ChatGPT is a large language model trained by OpenAI that is designed to generate human-like text responses based on a given input. It can be used for a variety of applications, such as chatbots, automated responses to customer inquiries, and more.
+Sepertinya Anda berencana membuat alat yang menggunakan model ChatGPT
+untuk mengekspor teks. ChatGPT adalah model bahasa yang besar yang dilatih oleh OpenAI
+yang dirancang untuk menghasilkan teks yang mirip dengan manusia berdasarkan input yang diberikan.
+Model ini dapat digunakan untuk berbagai aplikasi, seperti chatbot,
+respon otomatis terhadap pertanyaan pelanggan, dan lain-lain.
+
+Namun, perlu diingat bahwa sebagai model bahasa yang besar, ChatGPT tidak
+telah dilatih secara khusus untuk tugas tertentu, sehingga kualitas teks yang
+dihasilkan akan bergantung pada bagaimana penggunaannya dan konteks di mana
+ini diterapkan. Penting untuk menggunakan ChatGPT dengan tanggung jawab dan
+mempertimbangkan konsekuensi potensial penggunaannya dalam situasi apa pun.
 ```
 
-### Screenshot
+### Tangkapan Layar
 
 <div align="center">
+
 <img width="480" src="https://user-images.githubusercontent.com/9910706/205663680-6ac97fac-39b0-495c-bee4-8ef37713a9ae.png" />
 
 </div>
 
 ### JSON
 
-the raw content from API `https://chat.openai.com/backend-api/conversation/[id]`
+Konten mentah dari API `https://chat.openai.com/backend-api/conversation/[id]`
 
 <details>
-<summary>Click to see</summary>
+<summary>Klik untuk melihat</summary>
 
 ```json
 {
@@ -220,39 +230,39 @@ the raw content from API `https://chat.openai.com/backend-api/conversation/[id]`
 ```
 </details>
 
-<!-- ## 📤 Export Multiple Conversations
+## 📤 Ekspor Beberapa Percakapan
 
-When you click the "Export All" button, the **Export Conversations** dialog pops up. Here are the functions you can access.
+Ketika Anda mengklik tombol "Ekspor Semua", dialog **Ekspor Percakapan** akan muncul. Berikut adalah fungsi-fungsi yang dapat Anda akses.
 
-**Export from official export file (conversations.json)**
+**Ekspor dari file ekspor resmi (conversations.json)**
 
-Click the upload icon button to upload a JSON file of conversations, such as one downloaded from OpenAI.
+Klik tombol ikon unggah untuk mengunggah file JSON percakapan, seperti yang diunduh dari OpenAI.
 
-**Export from API**
+**Ekspor dari API**
 
-In the list of all your conversations, select which conversations you want to export. Check the "Select All" checkbox to export all your conversations.
+Dalam daftar semua percakapan Anda, pilih percakapan mana yang ingin Anda ekspor. Centang kotak "Pilih Semua" untuk mengekspor semua percakapan Anda.
 
-Select your export format from the dropdown on the bottom left. You can choose from the following formats.
+Pilih format ekspor Anda dari menu dropdown di kiri bawah. Anda dapat memilih dari format berikut:
 
 - **Markdown**
 - **HTML**
 - **JSON**
 - **JSON (ZIP)**
 
-Click the button to perform the action you want.
+Klik tombol untuk melakukan tindakan yang diinginkan.
 
-- **Archive** -  Archived chat sessions will disappear from the sidebar and can be managed in ChatGPT settings. See [#199](https://github.com/pionxzh/chatgpt-exporter/issues/199) for more details.
-- **Delete** - Deletes the selected conversations.
-- **Export** - Exports the selected conversations in the format chosen using the format selector. -->
+- **Arsipkan** - Sesi obrolan yang diarsipkan akan menghilang dari bilah sisi dan dapat dikelola di pengaturan ChatGPT. Lihat [#199](https://github.com/pionxzh/chatgpt-exporter/issues/199) untuk detail lebih lanjut.
+- **Hapus** - Menghapus percakapan yang dipilih.
+- **Ekspor** - Mengekspor percakapan yang dipilih dalam format yang dipilih menggunakan pemilih format.
 
-<!-- ## 🤝 Contribution
+## 🤝 Kontribusi
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md)
+Lihat [CONTRIBUTING.md](./CONTRIBUTING.md)
 
-## ⭐ Star History
+## ⭐ Sejarah Bintang
 
 <div align="center">
 
 <img src="https://api.star-history.com/svg?repos=pionxzh/chatgpt-exporter&type=Date" width="600" height="400" alt="Star History Chart" valign="middle">
 
-</div> -->
+</div>

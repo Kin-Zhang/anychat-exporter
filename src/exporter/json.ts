@@ -1,7 +1,7 @@
 import JSZip from 'jszip'
-import { fetchConversation, getCurrentChatId, processConversation } from '../api'
+import { processConversation } from '../api'
 import i18n from '../i18n'
-import { checkIfConversationStarted } from '../page'
+import { checkIfConversationStarted, fetchCurrentConversation, fetchRawData } from '../platforms/service'
 import { convertToOoba, convertToTavern } from '../utils/conversion'
 import { buildZipFileName, downloadFile, getFileNameWithFormat, normalizeProjectName } from '../utils/download'
 import type { ApiConversationWithId } from '../api'
@@ -13,15 +13,15 @@ export async function exportToJson(fileNameFormat: string) {
         return false
     }
 
-    const chatId = await getCurrentChatId()
-    const rawConversation = await fetchConversation(chatId, false)
-    const conversation = processConversation(rawConversation)
+    // fetchRawData returns the platform-native format (ChatGPT API shape, or Claude API shape, etc.)
+    const rawData = await fetchRawData()
+    const conversation = await fetchCurrentConversation()
 
-    const fileName = getFileNameWithFormat(fileNameFormat, 'json', { title: conversation.title, chatId })
-    /**
-     * The official format is just an array of the API response.
-     */
-    const content = conversationToJson([rawConversation])
+    const fileName = getFileNameWithFormat(fileNameFormat, 'json', {
+        title: conversation.title,
+        chatId: conversation.id,
+    })
+    const content = JSON.stringify(rawData)
     downloadFile(fileName, 'application/json', content)
 
     return true
@@ -33,11 +33,11 @@ export async function exportToTavern(fileNameFormat: string) {
         return false
     }
 
-    const chatId = await getCurrentChatId()
-    const rawConversation = await fetchConversation(chatId, false)
-    const conversation = processConversation(rawConversation)
-
-    const fileName = getFileNameWithFormat(`${fileNameFormat}.tavern`, 'jsonl', { title: conversation.title, chatId })
+    const conversation = await fetchCurrentConversation()
+    const fileName = getFileNameWithFormat(`${fileNameFormat}.tavern`, 'jsonl', {
+        title: conversation.title,
+        chatId: conversation.id,
+    })
     const content = convertToTavern(conversation)
     downloadFile(fileName, 'application/json-lines', content)
 
@@ -50,11 +50,11 @@ export async function exportToOoba(fileNameFormat: string) {
         return false
     }
 
-    const chatId = await getCurrentChatId()
-    const rawConversation = await fetchConversation(chatId, false)
-    const conversation = processConversation(rawConversation)
-
-    const fileName = getFileNameWithFormat(`${fileNameFormat}.ooba`, 'json', { title: conversation.title, chatId })
+    const conversation = await fetchCurrentConversation()
+    const fileName = getFileNameWithFormat(`${fileNameFormat}.ooba`, 'json', {
+        title: conversation.title,
+        chatId: conversation.id,
+    })
     const content = convertToOoba(conversation)
     downloadFile(fileName, 'application/json', content)
 

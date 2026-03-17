@@ -1,8 +1,8 @@
 import JSZip from 'jszip'
-import { fetchConversation, getCurrentChatId, processConversation } from '../api'
+import { processConversation } from '../api'
 import { KEY_TIMESTAMP_24H, KEY_TIMESTAMP_ENABLED, KEY_TIMESTAMP_HTML, baseUrl } from '../constants'
 import i18n from '../i18n'
-import { checkIfConversationStarted, getUserAvatar } from '../page'
+import { checkIfConversationStarted, fetchCurrentConversation, getUserAvatar } from '../platforms/service'
 import templateHtml from '../template.html?raw'
 import { buildZipFileName, downloadFile, getFileNameWithFormat } from '../utils/download'
 import { fromMarkdown, toHtml } from '../utils/markdown'
@@ -20,12 +20,10 @@ export async function exportToHtml(fileNameFormat: string, metaList: ExportMeta[
 
     const userAvatar = await getUserAvatar()
 
-    const chatId = await getCurrentChatId()
-    const rawConversation = await fetchConversation(chatId, true)
-    const conversation = processConversation(rawConversation)
+    const conversation = await fetchCurrentConversation()
     const html = conversationToHtml(conversation, userAvatar, metaList)
 
-    const fileName = getFileNameWithFormat(fileNameFormat, 'html', { title: conversation.title, chatId, createTime: conversation.createTime, updateTime: conversation.updateTime })
+    const fileName = getFileNameWithFormat(fileNameFormat, 'html', { title: conversation.title, chatId: conversation.id, createTime: conversation.createTime, updateTime: conversation.updateTime })
     downloadFile(fileName, 'text/html', standardizeLineBreaks(html))
 
     return true
@@ -80,7 +78,7 @@ function conversationToHtml(conversation: ConversationResult, avatar: string, me
     const conversationHtml = conversationNodes.map(({ message }) => {
         if (!message || !message.content) return null
 
-        // ChatGPT is talking to tool
+        // Assistant is talking to a tool (not the user)
         if (message.recipient !== 'all') return null
 
         // Skip "thinking" content (hidden reasoning steps from thinking models)
@@ -106,8 +104,8 @@ function conversationToHtml(conversation: ConversationResult, avatar: string, me
             }
         }
 
-        const author = transformAuthor(message.author)
         const model = message?.metadata?.model_slug === 'gpt-4' ? 'GPT-4' : 'GPT-3'
+        const author = transformAuthor(message.author, model)
         const authorType = message.author.role === 'user' ? 'user' : model
         const avatarEl = message.author.role === 'user'
             ? `<img alt="${author}" />`
@@ -227,10 +225,10 @@ function conversationToHtml(conversation: ConversationResult, avatar: string, me
     return html
 }
 
-function transformAuthor(author: ConversationNodeMessage['author']): string {
+function transformAuthor(author: ConversationNodeMessage['author'], model?: string): string {
     switch (author.role) {
         case 'assistant':
-            return 'ChatGPT'
+            return model || 'Assistant'
         case 'user':
             return 'You'
         case 'tool':

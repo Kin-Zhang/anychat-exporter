@@ -1,8 +1,8 @@
 import JSZip from 'jszip'
-import { fetchConversation, getCurrentChatId, processConversation } from '../api'
+import { processConversation } from '../api'
 import { KEY_TIMESTAMP_24H, KEY_TIMESTAMP_ENABLED, KEY_TIMESTAMP_MARKDOWN, baseUrl } from '../constants'
 import i18n from '../i18n'
-import { checkIfConversationStarted } from '../page'
+import { checkIfConversationStarted, fetchCurrentConversation } from '../platforms/service'
 import { buildZipFileName, downloadFile, getFileNameWithFormat } from '../utils/download'
 import { fromMarkdown, toMarkdown } from '../utils/markdown'
 import { ScriptStorage } from '../utils/storage'
@@ -17,12 +17,10 @@ export async function exportToMarkdown(fileNameFormat: string, metaList: ExportM
         return false
     }
 
-    const chatId = await getCurrentChatId()
-    const rawConversation = await fetchConversation(chatId, true)
-    const conversation = processConversation(rawConversation)
+    const conversation = await fetchCurrentConversation()
     const markdown = conversationToMarkdown(conversation, metaList)
 
-    const fileName = getFileNameWithFormat(fileNameFormat, 'md', { title: conversation.title, chatId, createTime: conversation.createTime, updateTime: conversation.updateTime })
+    const fileName = getFileNameWithFormat(fileNameFormat, 'md', { title: conversation.title, chatId: conversation.id, createTime: conversation.createTime, updateTime: conversation.updateTime })
     downloadFile(fileName, 'text/markdown', standardizeLineBreaks(markdown))
 
     return true
@@ -96,7 +94,7 @@ function conversationToMarkdown(conversation: ConversationResult, metaList?: Exp
     const content = conversationNodes.map(({ message }) => {
         if (!message || !message.content) return null
 
-        // ChatGPT is talking to tool
+        // Assistant is talking to a tool (not the user)
         if (message.recipient !== 'all') return null
 
         // Skip "thinking" content (hidden reasoning steps from thinking models)
@@ -132,7 +130,7 @@ function conversationToMarkdown(conversation: ConversationResult, metaList?: Exp
             timestampHtml = `<time datetime="${date.toISOString()}" title="${date.toLocaleString()}">${conversationTime}</time>\n\n`
         }
 
-        const author = transformAuthor(message.author)
+        const author = transformAuthor(message.author, model)
 
         const postSteps: Array<(input: string) => string> = []
         if (message.author.role === 'assistant') {
@@ -185,10 +183,10 @@ function conversationToMarkdown(conversation: ConversationResult, metaList?: Exp
     return markdown
 }
 
-function transformAuthor(author: ConversationNodeMessage['author']): string {
+function transformAuthor(author: ConversationNodeMessage['author'], model?: string): string {
     switch (author.role) {
         case 'assistant':
-            return 'ChatGPT'
+            return model || 'Assistant'
         case 'user':
             return 'You'
         case 'tool':

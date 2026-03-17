@@ -22,3 +22,7 @@ node_modules
 
 tsconfig.tsbuildinfo
 .claude
+
+package-lock.json
+
+.vscode/settings.json
