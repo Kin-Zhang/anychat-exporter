@@ -12,9 +12,9 @@ export async function exportToText() {
         return false
     }
 
-    const { conversationNodes } = await fetchCurrentConversation()
+    const { conversationNodes, model } = await fetchCurrentConversation()
     const text = conversationNodes
-        .map(({ message }) => transformMessage(message))
+        .map(({ message }) => transformMessage(message, model))
         .filter(Boolean)
         .join('\n\n')
 
@@ -25,10 +25,10 @@ export async function exportToText() {
 
 const LatexRegex = /(\s\$\$.+\$\$\s|\s\$.+\$\s|\\\[.+\\\]|\\\(.+\\\))|(^\$$[\S\s]+^\$$)|(^\$\$[\S\s]+^\$\$$)/gm
 
-function transformMessage(message?: ConversationNodeMessage) {
+function transformMessage(message?: ConversationNodeMessage, model?: string) {
     if (!message || !message.content) return null
 
-    // ChatGPT is talking to tool
+    // Assistant is talking to a tool (not the user)
     if (message.recipient !== 'all') return null
 
     // Skip "thinking" content (hidden reasoning steps from thinking models)
@@ -54,7 +54,7 @@ function transformMessage(message?: ConversationNodeMessage) {
         }
     }
 
-    const author = transformAuthor(message.author)
+    const author = transformAuthor(message.author, model)
     let content = transformContent(message.content, message.metadata)
 
     const matches = content.match(LatexRegex)
@@ -155,10 +155,10 @@ function reformatContent(input: string) {
     return result
 }
 
-function transformAuthor(author: ConversationNodeMessage['author']): string {
+function transformAuthor(author: ConversationNodeMessage['author'], model?: string): string {
     switch (author.role) {
         case 'assistant':
-            return 'ChatGPT'
+            return model || 'Assistant'
         case 'user':
             return 'You'
         case 'tool':

@@ -1665,7 +1665,7 @@ html {
       const injectionMap = /* @__PURE__ */ new Map();
       const injectNavMenu = (nav) => {
         if (injectionMap.has(nav)) return;
-        console.log("[Exporter] Injecting nav", nav);
+        console.warn("[Exporter] Injecting nav", nav);
         const container = getContainer();
         injectionMap.set(nav, container);
         const chatList = nav.querySelector(":scope > div.sticky.bottom-0");
@@ -1744,7 +1744,7 @@ html {
           container.style.borderTop = "1px solid rgba(255,255,255,0.1)";
           nav.appendChild(container);
         }
-        console.log("[Exporter] Injected into Claude nav", nav);
+        console.warn("[Exporter] Injected into Claude nav", nav);
       };
       const interval = setInterval(() => {
         tryInject();
@@ -1904,7 +1904,7 @@ ${attachmentInfo}`;
           const container2 = getContainer();
           container2.style.padding = "8px";
           bottomControls.parentElement.insertBefore(container2, bottomControls);
-          console.log("[Exporter] Injected into Gemini sidebar above controls", bottomControls);
+          console.warn("[Exporter] Injected into Gemini sidebar above controls", bottomControls);
           return;
         }
         const sidebarCandidates = [
@@ -1918,7 +1918,7 @@ ${attachmentInfo}`;
         const container = getContainer();
         container.style.padding = "8px";
         sidebar.prepend(container);
-        console.log("[Exporter] Injected into Gemini sidebar", sidebar);
+        console.warn("[Exporter] Injected into Gemini sidebar", sidebar);
       };
       const interval = setInterval(() => {
         tryInject();
@@ -10977,7 +10977,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
             function isOnlyContent(parent, element) {
                 let onlyKaTeX = true;
                 parent.childNodes.forEach(function(child) {
-                    console.log(child.textContent);
+                    console.warn(child.textContent);
                     if (child !== element) {
                         if (child.nodeType === Node.TEXT_NODE) {
                             if (child.textContent.trim().length > 0) {
@@ -23025,7 +23025,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
           return null;
         }
       }
-      const author = transformAuthor$2(message.author);
+      const author = transformAuthor$2(message.author, model2);
       const model2 = ((_e2 = message == null ? void 0 : message.metadata) == null ? void 0 : _e2.model_slug) === "gpt-4" ? "GPT-4" : "GPT-3";
       const authorType = message.author.role === "user" ? "user" : model2;
       const avatarEl = message.author.role === "user" ? `<img alt="${author}" />` : '<svg width="41" height="41"><use xlink:href="#chatgpt" /></svg>';
@@ -23097,10 +23097,10 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
     const html2 = templateHtml.replaceAll("{{title}}", title2).replaceAll("{{date}}", date).replaceAll("{{time}}", time).replaceAll("{{source}}", source).replaceAll("{{lang}}", lang).replaceAll("{{theme}}", theme).replaceAll("{{avatar}}", avatar).replaceAll("{{details}}", detailsHtml).replaceAll("{{content}}", conversationHtml);
     return html2;
   }
-  function transformAuthor$2(author) {
+  function transformAuthor$2(author, model) {
     switch (author.role) {
       case "assistant":
-        return "ChatGPT";
+        return model || "Assistant";
       case "user":
         return "You";
       case "tool":
@@ -23243,11 +23243,13 @@ ${content2.text}
       this._isDisposed = true;
     }
   }
+  const GEMINI_CAPTURE_TAGS = /* @__PURE__ */ new Set(["conversation-turn", "model-response", "user-query", "message-content"]);
   function fnIgnoreElements(el) {
+    if (GEMINI_CAPTURE_TAGS.has(String(el.tagName).toLowerCase())) return false;
     return typeof el.shadowRoot === "object" && el.shadowRoot !== null;
   }
   async function exportToPng(fileNameFormat) {
-    var _a;
+    var _a, _b;
     if (!checkIfConversationStarted()) {
       alert(instance.t("Please start a conversation first"));
       return false;
@@ -23255,11 +23257,26 @@ ${content2.text}
     const effect = new Effect();
     let thread = document.querySelector('#thread div:has(> [data-testid="conversation-turn-1"])');
     let isClaude = false;
+    let isGemini = false;
     if (!thread) {
       const claudeMessages = document.querySelectorAll("[data-test-render-count]");
       if (claudeMessages.length > 0) {
         thread = claudeMessages[0].parentElement;
         isClaude = true;
+      }
+    }
+    if (!thread) {
+      const firstTurn = document.querySelector("conversation-turn, .conversation-container");
+      if (firstTurn) {
+        let best = firstTurn.parentElement;
+        let candidate = best;
+        while (candidate && candidate !== document.body) {
+          const turns = candidate.querySelectorAll("conversation-turn, .conversation-container");
+          if (turns.length > 0) best = candidate;
+          candidate = candidate.parentElement;
+        }
+        thread = best;
+        isGemini = !!thread;
       }
     }
     if (!thread || thread.children.length === 0 || thread.scrollHeight < 50) {
@@ -23269,7 +23286,33 @@ ${content2.text}
     const isDarkMode = document.documentElement.classList.contains("dark") || document.documentElement.getAttribute("data-mode") === "dark";
     effect.add(() => {
       const style = document.createElement("style");
-      if (isClaude) {
+      if (isGemini) {
+        const bg = getComputedStyle(document.body).backgroundColor || (isDarkMode ? "#1e1f20" : "#ffffff");
+        style.textContent = `
+                /* stable background for screenshot */
+                infinite-scroller,
+                .conversation-container,
+                conversation-turn {
+                    background-color: ${bg};
+                }
+
+                /* hide input bar, toolbar, action buttons */
+                input-area-v2,
+                .input-area-container,
+                toolbox-drawer,
+                message-actions,
+                .action-buttons,
+                .regenerate-button,
+                .scroll-to-bottom-button,
+                .bottom-of-page-button {
+                    display: none !important;
+                }
+
+                img {
+                    display: initial !important;
+                }
+            `;
+      } else if (isClaude) {
         style.textContent = `
                 /* ensure background is not transparent */
                 div:has(> [data-test-render-count]) {
@@ -23344,7 +23387,7 @@ ${content2.text}
           ignoreElements: fnIgnoreElements
         });
       } catch (error2) {
-        console.log(`ChatGPT Exporter:takeScreenshot with height=${height} width=${width} scale=${scale}`);
+        console.warn(`ChatGPT Exporter:takeScreenshot with height=${height} width=${width} scale=${scale}`);
         console.error("Failed to take screenshot", error2);
       }
       const context = canvas == null ? void 0 : canvas.getContext("2d");
@@ -23365,6 +23408,9 @@ ${content2.text}
     let chatId = getChatIdFromUrl();
     if (!chatId && isClaude) {
       chatId = ((_a = location.pathname.match(/\/chat\/([a-z0-9-]+)/i)) == null ? void 0 : _a[1]) || null;
+    }
+    if (!chatId && isGemini) {
+      chatId = ((_b = location.pathname.match(/\/app\/([a-z0-9]+)/i)) == null ? void 0 : _b[1]) || null;
     }
     const fileName = getFileNameWithFormat(fileNameFormat, "png", { chatId: chatId || void 0 });
     downloadUrl(fileName, dataUrl);
@@ -23619,7 +23665,7 @@ ${_metaList.join("\n")}
 
 `;
       }
-      const author = transformAuthor$1(message.author);
+      const author = transformAuthor$1(message.author, model);
       const postSteps = [];
       if (message.author.role === "assistant") {
         postSteps.push((input) => transformContentReferences$1(input, message.metadata));
@@ -23655,10 +23701,10 @@ ${timestampHtml}${content22}`;
 ${content2}`;
     return markdown;
   }
-  function transformAuthor$1(author) {
+  function transformAuthor$1(author, model) {
     switch (author.role) {
       case "assistant":
-        return "ChatGPT";
+        return model || "Assistant";
       case "user":
         return "You";
       case "tool":
@@ -23789,13 +23835,13 @@ ${content2.text}
       alert(instance.t("Please start a conversation first"));
       return false;
     }
-    const { conversationNodes } = await fetchCurrentConversation();
-    const text2 = conversationNodes.map(({ message }) => transformMessage(message)).filter(Boolean).join("\n\n");
+    const { conversationNodes, model } = await fetchCurrentConversation();
+    const text2 = conversationNodes.map(({ message }) => transformMessage(message, model)).filter(Boolean).join("\n\n");
     copyToClipboard(standardizeLineBreaks(text2));
     return true;
   }
   const LatexRegex = /(\s\$\$.+\$\$\s|\s\$.+\$\s|\\\[.+\\\]|\\\(.+\\\))|(^\$$[\S\s]+^\$$)|(^\$\$[\S\s]+^\$\$$)/gm;
-  function transformMessage(message) {
+  function transformMessage(message, model) {
     var _a, _b, _c, _d;
     if (!message || !message.content) return null;
     if (message.recipient !== "all") return null;
@@ -23811,7 +23857,7 @@ ${content2.text}
         return null;
       }
     }
-    const author = transformAuthor(message.author);
+    const author = transformAuthor(message.author, model);
     let content2 = transformContent(message.content, message.metadata);
     const matches = content2.match(LatexRegex);
     if (matches) {
@@ -23886,10 +23932,10 @@ ${content2}`;
     }
     return result;
   }
-  function transformAuthor(author) {
+  function transformAuthor(author, model) {
     switch (author.role) {
       case "assistant":
-        return "ChatGPT";
+        return model || "Assistant";
       case "user":
         return "You";
       case "tool":
@@ -25565,11 +25611,11 @@ ${content2}`;
       ];
       const adapter = allAdapters.find((a2) => a2.hostnames.includes(hostname));
       if (!adapter) {
-        console.log("[Exporter] Unsupported platform:", hostname);
+        console.warn("[Exporter] Unsupported platform:", hostname);
         return;
       }
       setActiveAdapter(adapter);
-      console.log("[Exporter] Loaded for", hostname);
+      console.warn("[Exporter] Loaded for", hostname);
       const styleEl = document.createElement("style");
       styleEl.id = "sentinel-css";
       document.head.append(styleEl);

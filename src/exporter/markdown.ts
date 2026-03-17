@@ -94,7 +94,7 @@ function conversationToMarkdown(conversation: ConversationResult, metaList?: Exp
     const content = conversationNodes.map(({ message }) => {
         if (!message || !message.content) return null
 
-        // ChatGPT is talking to tool
+        // Assistant is talking to a tool (not the user)
         if (message.recipient !== 'all') return null
 
         // Skip "thinking" content (hidden reasoning steps from thinking models)
@@ -130,7 +130,7 @@ function conversationToMarkdown(conversation: ConversationResult, metaList?: Exp
             timestampHtml = `<time datetime="${date.toISOString()}" title="${date.toLocaleString()}">${conversationTime}</time>\n\n`
         }
 
-        const author = transformAuthor(message.author)
+        const author = transformAuthor(message.author, model)
 
         const postSteps: Array<(input: string) => string> = []
         if (message.author.role === 'assistant') {
@@ -183,10 +183,10 @@ function conversationToMarkdown(conversation: ConversationResult, metaList?: Exp
     return markdown
 }
 
-function transformAuthor(author: ConversationNodeMessage['author']): string {
+function transformAuthor(author: ConversationNodeMessage['author'], model?: string): string {
     switch (author.role) {
         case 'assistant':
-            return 'ChatGPT'
+            return model || 'Assistant'
         case 'user':
             return 'You'
         case 'tool':

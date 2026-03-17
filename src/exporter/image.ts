@@ -7,7 +7,10 @@ import { Effect } from '../utils/effect'
 import { sleep } from '../utils/utils'
 
 // https://github.com/niklasvh/html2canvas/issues/2792#issuecomment-1042948572
+// Gemini uses custom elements with shadow roots that we still need to capture.
+const GEMINI_CAPTURE_TAGS = new Set(['conversation-turn', 'model-response', 'user-query', 'message-content'])
 function fnIgnoreElements(el: any) {
+    if (GEMINI_CAPTURE_TAGS.has(String(el.tagName).toLowerCase())) return false
     return typeof el.shadowRoot === 'object' && el.shadowRoot !== null
 }
 
@@ -21,12 +24,29 @@ export async function exportToPng(fileNameFormat: string) {
 
     let thread = document.querySelector('#thread div:has(> [data-testid="conversation-turn-1"])')
     let isClaude = false
+    let isGemini = false
 
     if (!thread) {
         const claudeMessages = document.querySelectorAll('[data-test-render-count]')
         if (claudeMessages.length > 0) {
             thread = claudeMessages[0].parentElement
             isClaude = true
+        }
+    }
+
+    // Gemini: walk up from the first conversation-turn to find the container holding all turns
+    if (!thread) {
+        const firstTurn = document.querySelector('conversation-turn, .conversation-container')
+        if (firstTurn) {
+            let best: Element | null = firstTurn.parentElement
+            let candidate: Element | null = best
+            while (candidate && candidate !== document.body) {
+                const turns = candidate.querySelectorAll('conversation-turn, .conversation-container')
+                if (turns.length > 0) best = candidate
+                candidate = candidate.parentElement
+            }
+            thread = best
+            isGemini = !!thread
         }
     }
 
@@ -40,7 +60,34 @@ export async function exportToPng(fileNameFormat: string) {
     effect.add(() => {
         const style = document.createElement('style')
 
-        if (isClaude) {
+        if (isGemini) {
+            const bg = getComputedStyle(document.body).backgroundColor || (isDarkMode ? '#1e1f20' : '#ffffff')
+            style.textContent = `
+                /* stable background for screenshot */
+                infinite-scroller,
+                .conversation-container,
+                conversation-turn {
+                    background-color: ${bg};
+                }
+
+                /* hide input bar, toolbar, action buttons */
+                input-area-v2,
+                .input-area-container,
+                toolbox-drawer,
+                message-actions,
+                .action-buttons,
+                .regenerate-button,
+                .scroll-to-bottom-button,
+                .bottom-of-page-button {
+                    display: none !important;
+                }
+
+                img {
+                    display: initial !important;
+                }
+            `
+        }
+        else if (isClaude) {
             style.textContent = `
                 /* ensure background is not transparent */
                 div:has(> [data-test-render-count]) {
@@ -162,6 +209,9 @@ export async function exportToPng(fileNameFormat: string) {
     let chatId = getChatIdFromUrl()
     if (!chatId && isClaude) {
         chatId = location.pathname.match(/\/chat\/([a-z0-9-]+)/i)?.[1] || null
+    }
+    if (!chatId && isGemini) {
+        chatId = location.pathname.match(/\/app\/([a-z0-9]+)/i)?.[1] || null
     }
 
     const fileName = getFileNameWithFormat(fileNameFormat, 'png', { chatId: chatId || undefined })
