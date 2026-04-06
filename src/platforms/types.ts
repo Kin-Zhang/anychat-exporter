@@ -2,6 +2,9 @@ import type { ConversationResult } from '../api'
 
 // Every platform adapter must implement this interface
 export interface PlatformAdapter {
+    // Human-readable platform name (e.g. 'ChatGPT', 'Claude', 'Gemini')
+    readonly platformName: string
+
     // List of hostnames this adapter handles
     readonly hostnames: string[]
 

@@ -2,6 +2,7 @@ import { render } from 'preact'
 import sentinel from 'sentinel-js'
 import { fetchConversation, processConversation } from './api'
 import { getChatIdFromUrl, isSharePage } from './page'
+import { AIStudioAdapter } from './platforms/aistudio'
 import { ChatGPTAdapter } from './platforms/chatgpt'
 import { ClaudeAdapter } from './platforms/claude'
 import { GeminiAdapter } from './platforms/gemini'
@@ -22,6 +23,7 @@ function main() {
             new ChatGPTAdapter(),
             new ClaudeAdapter(),
             new GeminiAdapter(),
+            new AIStudioAdapter(),
         ]
 
         const adapter = allAdapters.find(a => a.hostnames.includes(hostname))

@@ -6,17 +6,23 @@ import { standardizeLineBreaks } from '../utils/text'
 import type { ConversationNodeMessage } from '../api'
 import type { Emphasis, Strong } from 'mdast'
 
-export async function exportToText() {
+const AttachmentBlockRegex = /\n\n\[Attachment: [^\]]*(?:\n[\s\S]*?)?\]/g
+
+export async function exportToText(includeAttachments = false) {
     if (!checkIfConversationStarted()) {
         alert(i18n.t('Please start a conversation first'))
         return false
     }
 
     const { conversationNodes, model } = await fetchCurrentConversation()
-    const text = conversationNodes
+    let text = conversationNodes
         .map(({ message }) => transformMessage(message, model))
         .filter(Boolean)
         .join('\n\n')
+
+    if (!includeAttachments) {
+        text = text.replace(AttachmentBlockRegex, '')
+    }
 
     copyToClipboard(standardizeLineBreaks(text))
 

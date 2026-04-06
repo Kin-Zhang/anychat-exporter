@@ -5,6 +5,7 @@ import { baseUrl } from '../constants'
 import { useTitle } from '../hooks/useTitle'
 import { LOCALES } from '../i18n'
 import { getChatIdFromUrl } from '../page'
+import { getPlatformName } from '../platforms/service'
 import { getFileNameWithFormat } from '../utils/download'
 import { timestamp as _timestamp, dateStr, unixTimestampToISOString } from '../utils/utils'
 import { IconCross, IconTrash } from './Icons'
@@ -36,6 +37,7 @@ export const SettingDialog: FC<SettingDialogProps> = ({
         enableMeta, setEnableMeta,
         exportMetaList, setExportMetaList,
         exportAllLimit, setExportAllLimit,
+        copyTextIncludeAttachments, setCopyTextIncludeAttachments,
         /* eslint-enable pionxzh/consistent-list-newline */
     } = useSettingContext()
     const { t, i18n } = useTranslation()
@@ -91,6 +93,8 @@ export const SettingDialog: FC<SettingDialogProps> = ({
                                 <dd>
                                     <p className="text-sm text-gray-700 dark:text-gray-300">
                                         {t('Available variables')}:{' '}
+                                        <Variable name="{platform}" title={getPlatformName()} />
+                                        ,{' '}
                                         <Variable name="{title}" title={title} />
                                         ,{' '}
                                         <Variable name="{date}" title={date} />
@@ -142,6 +146,19 @@ export const SettingDialog: FC<SettingDialogProps> = ({
                                         </span>
                                     </div>
                                 </dd>
+                            </div>
+                        </div>
+                        <div className="relative flex bg-white dark:bg-white/5 rounded p-4">
+                            <div>
+                                <dt className="text-md font-medium text-gray-800 dark:text-white">
+                                    {t('Copy Text Attachments')}
+                                </dt>
+                                <dd className="text-sm text-gray-700 dark:text-gray-300">
+                                    {t('Copy Text Attachments Description')}
+                                </dd>
+                            </div>
+                            <div className="absolute right-4">
+                                <Toggle label="" checked={copyTextIncludeAttachments} onCheckedUpdate={setCopyTextIncludeAttachments} />
                             </div>
                         </div>
                         <div className="relative flex bg-white dark:bg-white/5 rounded p-4">

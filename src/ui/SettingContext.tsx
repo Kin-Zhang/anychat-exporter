@@ -1,6 +1,7 @@
 import { createContext, useContext } from 'preact/compat'
 import { useCallback } from 'preact/hooks'
 import {
+    KEY_COPY_TEXT_INCLUDE_ATTACHMENTS,
     KEY_EXPORT_ALL_LIMIT,
     KEY_FILENAME_FORMAT,
     KEY_META_ENABLED,
@@ -13,7 +14,7 @@ import {
 import { useGMStorage } from '../hooks/useGMStorage'
 import type { FC } from 'preact/compat'
 
-const defaultFormat = 'ChatGPT-{title}'
+const defaultFormat = '{platform}-{title}'
 const defaultExportAllLimit = 1000
 
 export interface ExportMeta {
@@ -45,6 +46,10 @@ const SettingContext = createContext({
     setExportMetaList: (_: ExportMeta[]) => {},
     exportAllLimit: defaultExportAllLimit,
     setExportAllLimit: (_: number) => {},
+
+    copyTextIncludeAttachments: false,
+    setCopyTextIncludeAttachments: (_: boolean) => {},
+
     resetDefault: () => {},
 })
 
@@ -61,18 +66,22 @@ export const SettingProvider: FC = ({ children }) => {
     const [exportMetaList, setExportMetaList] = useGMStorage(KEY_META_LIST, defaultExportMetaList)
     const [exportAllLimit, setExportAllLimit] = useGMStorage(KEY_EXPORT_ALL_LIMIT, defaultExportAllLimit)
 
+    const [copyTextIncludeAttachments, setCopyTextIncludeAttachments] = useGMStorage(KEY_COPY_TEXT_INCLUDE_ATTACHMENTS, false)
+
     const resetDefault = useCallback(() => {
         setFormat(defaultFormat)
         setEnableTimestamp(false)
         setEnableMeta(false)
         setExportMetaList(defaultExportMetaList)
         setExportAllLimit(defaultExportAllLimit)
+        setCopyTextIncludeAttachments(false)
     }, [
         setFormat,
         setEnableTimestamp,
         setEnableMeta,
         setExportMetaList,
         setExportAllLimit,
+        setCopyTextIncludeAttachments,
     ])
 
     return (
@@ -97,6 +106,9 @@ export const SettingProvider: FC = ({ children }) => {
 
                 exportAllLimit,
                 setExportAllLimit,
+
+                copyTextIncludeAttachments,
+                setCopyTextIncludeAttachments,
 
                 resetDefault,
             }}

@@ -13,6 +13,11 @@ export function getActiveAdapter(): PlatformAdapter {
     return activeAdapter
 }
 
+// Get the platform name (e.g. 'ChatGPT', 'Claude', 'Gemini')
+export function getPlatformName(): string {
+    return activeAdapter?.platformName ?? 'Chat'
+}
+
 // Whether the current platform supports export-all functionality
 export function supportsExportAll(): boolean {
     return activeAdapter?.supportsExportAll() ?? false

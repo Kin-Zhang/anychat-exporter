@@ -46,5 +46,7 @@
   "Select a source to load conversations": "Selecciona un proyecto arriba para cargar conversaciones.",
   "Search": "Buscar",
   "Last 100": "Últimas 100",
-  "No results": "Sin resultados"
+  "No results": "Sin resultados",
+  "Copy Text Attachments": "Adjuntos en texto copiado",
+  "Copy Text Attachments Description": "Incluir contenido de archivos adjuntos (ej. texto extraído de archivos subidos) al copiar texto."
 }

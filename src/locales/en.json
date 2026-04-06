@@ -46,5 +46,7 @@
   "Select a source to load conversations": "Select a project above to load conversations.",
   "Search": "Search",
   "Last 100": "Last 100",
-  "No results": "No results"
+  "No results": "No results",
+  "Copy Text Attachments": "Copy Text Attachments",
+  "Copy Text Attachments Description": "Include attachment content (e.g. extracted text from uploaded files) when copying text."
 }

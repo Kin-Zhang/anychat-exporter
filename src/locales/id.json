@@ -46,5 +46,7 @@
   "Select a source to load conversations": "Pilih proyek di atas untuk memuat percakapan.",
   "Search": "Cari",
   "Last 100": "100 Terakhir",
-  "No results": "Tidak ada hasil"
+  "No results": "Tidak ada hasil",
+  "Copy Text Attachments": "Lampiran dalam Teks Disalin",
+  "Copy Text Attachments Description": "Sertakan konten lampiran (misalnya teks yang diekstrak dari file yang diunggah) saat menyalin teks."
 }

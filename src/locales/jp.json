@@ -46,5 +46,7 @@
   "Select a source to load conversations": "上からプロジェクトを選択して会話を読み込んでください。",
   "Search": "検索",
   "Last 100": "最新100件",
-  "No results": "結果なし"
+  "No results": "結果なし",
+  "Copy Text Attachments": "テキストコピー時に添付ファイルを含む",
+  "Copy Text Attachments Description": "テキストをコピーする際に添付ファイルの内容（アップロードされたファイルから抽出されたテキストなど）を含めます。"
 }

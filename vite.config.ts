@@ -72,6 +72,10 @@ export default defineConfig({
                     // Google Gemini
                     'https://gemini.google.com/',
                     'https://gemini.google.com/app/*',
+
+                    // Google AI Studio
+                    'https://aistudio.google.com/',
+                    'https://aistudio.google.com/prompts/*',
                 ],
                 'icon': 'https://chat.openai.com/favicon.ico',
                 'run-at': 'document-end',

@@ -34,6 +34,7 @@ function MenuInner({ container }: { container: HTMLDivElement }) {
         timeStamp24H,
         enableMeta,
         exportMetaList,
+        copyTextIncludeAttachments,
     } = useSettingContext()
 
     useEffect(() => {
@@ -47,7 +48,7 @@ function MenuInner({ container }: { container: HTMLDivElement }) {
 
     const metaList = useMemo(() => enableMeta ? exportMetaList : [], [enableMeta, exportMetaList])
 
-    const onClickText = useCallback(() => exportToText(), [])
+    const onClickText = useCallback(() => exportToText(copyTextIncludeAttachments), [copyTextIncludeAttachments])
     const onClickPng = useCallback(() => exportToPng(format), [format])
     const onClickMarkdown = useCallback(() => exportToMarkdown(format, metaList), [format, metaList])
     const onClickHtml = useCallback(() => exportToHtml(format, metaList), [format, metaList])

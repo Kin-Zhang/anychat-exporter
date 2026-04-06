@@ -8,12 +8,23 @@ interface ClaudeOrg {
     name: string
 }
 
+interface ClaudeContentBlock {
+    type: 'text' | 'thinking' | 'tool_use' | 'tool_result' | (string & {})
+    text?: string
+    thinking?: string
+    name?: string
+    id?: string
+    input?: unknown
+    content?: unknown
+}
+
 interface ClaudeMessage {
     uuid: string
     text: string
     sender: 'human' | 'assistant'
     created_at: string
     updated_at: string
+    content?: ClaudeContentBlock[]
     attachments?: Array<{
         file_name: string
         file_type: string
@@ -39,6 +50,7 @@ interface ClaudeConversation {
 const defaultAvatar = 'data:image/svg+xml,%3Csvg%20stroke%3D%22currentColor%22%20fill%3D%22none%22%20stroke-width%3D%221.5%22%20viewBox%3D%22-6%20-6%2036%2036%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20style%3D%22color%3A%20white%3B%20background%3A%20%23ab68ff%3B%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M20%2021v-2a4%204%200%200%200-4-4H8a4%204%200%200%200-4%204v2%22%3E%3C%2Fpath%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%227%22%20r%3D%224%22%3E%3C%2Fcircle%3E%3C%2Fsvg%3E'
 
 export class ClaudeAdapter implements PlatformAdapter {
+    readonly platformName = 'Claude'
     readonly hostnames = ['claude.ai']
 
     // Cached org ID to avoid redundant API calls
@@ -201,16 +213,34 @@ export class ClaudeAdapter implements PlatformAdapter {
         }
     }
 
-    // Append attachment info to the message text
     private buildMessageText(msg: ClaudeMessage): string {
-        let text = msg.text
+        let text: string
+
+        if (msg.content && Array.isArray(msg.content) && msg.content.length > 0) {
+            const parts: string[] = []
+            for (const block of msg.content) {
+                if (block.type === 'thinking') continue
+                if (block.type === 'tool_use') continue
+                if (block.type === 'tool_result') continue
+                if (block.type === 'text' && block.text) {
+                    parts.push(block.text)
+                }
+            }
+            text = parts.join('\n\n')
+        }
+        else {
+            text = msg.text
+        }
+
+        text = text.replace(/This block is not supported on your current device yet\.\n?/g, '')
+
         if (msg.attachments?.length) {
             const attachmentInfo = msg.attachments
                 .map(a => `[Attachment: ${a.file_name}${a.extracted_content ? `\n${a.extracted_content}` : ''}]`)
                 .join('\n')
             text += `\n\n${attachmentInfo}`
         }
-        return text
+        return text.trim()
     }
 
     private resolveModelName(slug?: string | null): string {

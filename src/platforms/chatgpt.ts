@@ -12,6 +12,7 @@ import type { PlatformAdapter } from './types'
 import type { ApiConversationWithId, ConversationResult } from '../api'
 
 export class ChatGPTAdapter implements PlatformAdapter {
+    readonly platformName = 'ChatGPT'
     readonly hostnames = ['chat.openai.com', 'chatgpt.com', 'new.oaifree.com']
 
     checkIfConversationStarted(): boolean {

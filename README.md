@@ -2,7 +2,7 @@
 
 <div align="center">
 
-A GreasyFork script to export the chat history of [ChatGPT](https://chat.openai.com/), [Claude](https://claude.ai/), and [Gemini](https://gemini.google.com/) in various formats, including Text, HTML, Markdown, PNG, and JSON. Repo modified from [ChatGPT Exporter](https://github.com/pionxzh/chatgpt-exporter).
+A GreasyFork script to export the chat history of [ChatGPT](https://chat.openai.com/), [Claude](https://claude.ai/), [AI Google Studio](https://aistudio.google.com/) and [Gemini](https://gemini.google.com/) in various formats, including Text, HTML, Markdown, PNG, and JSON. Repo modified from [ChatGPT Exporter](https://github.com/pionxzh/chatgpt-exporter).
 
 <!-- [![license][license-image]][license-url]
 [![release][release-image]][release-url]
@@ -17,7 +17,7 @@ A GreasyFork script to export the chat history of [ChatGPT](https://chat.openai.
 
 <!-- English &nbsp;&nbsp;|&nbsp;&nbsp; [Français](./README_FR.md) &nbsp;&nbsp;|&nbsp;&nbsp; [Indonesia](./README_ID.md) &nbsp;&nbsp;|&nbsp;&nbsp; [한국어](./README_KR.md) &nbsp;&nbsp;|&nbsp;&nbsp; [Türkçe](./README_TR.md) -->
 
-![image](docs/demo.png)
+![image](docs/anychat-demo.png)
 
 ## Install
 
@@ -59,6 +59,8 @@ A GreasyFork script to export the chat history of [ChatGPT](https://chat.openai.
 - [JSON](#json)
 
 ## 💡 Example
+
+Default Export will not include the text/pdf/images/attachements content etc. Please switch on "Include Attachments" in Settings to export them.
 
 ### Text
 

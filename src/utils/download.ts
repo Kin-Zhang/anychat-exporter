@@ -1,4 +1,5 @@
 import sanitize from 'sanitize-filename'
+import { getPlatformName } from '../platforms/service'
 import { dateStr, timestamp, unixTimestampToISOString } from './utils'
 
 export function downloadFile(filename: string, type: string, content: string | Blob) {
@@ -29,10 +30,11 @@ export function normalizeProjectName(projectName: string) {
 }
 
 export function buildZipFileName(format: string, projectName?: string) {
+    const platform = getPlatformName().toLowerCase()
     if (projectName) {
-        return `chatgpt-export-${format}-project-${normalizeProjectName(projectName)}.zip`
+        return `${platform}-export-${format}-project-${normalizeProjectName(projectName)}.zip`
     }
-    return `chatgpt-export-${format}.zip`
+    return `${platform}-export-${format}.zip`
 }
 
 export function getFileNameWithFormat(format: string, ext: string, {
@@ -50,6 +52,7 @@ export function getFileNameWithFormat(format: string, ext: string, {
     const _updateTime = unixTimestampToISOString(updateTime)
 
     return format
+        .replace('{platform}', getPlatformName())
         .replace('{title}', _title)
         .replace('{date}', dateStr())
         .replace('{timestamp}', timestamp())

@@ -26,3 +26,4 @@ tsconfig.tsbuildinfo
 package-lock.json
 
 .vscode/settings.json
+docs/*.odg

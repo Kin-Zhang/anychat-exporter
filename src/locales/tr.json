@@ -46,5 +46,7 @@
   "Select a source to load conversations": "Konuşmaları yüklemek için yukarıdan bir proje seçin.",
   "Search": "Ara",
   "Last 100": "Son 100",
-  "No results": "Sonuç yok"
+  "No results": "Sonuç yok",
+  "Copy Text Attachments": "Kopyalanan Metinde Ekler",
+  "Copy Text Attachments Description": "Metin kopyalanırken ek içerikleri (yüklenen dosyalardan çıkarılan metin gibi) dahil et."
 }

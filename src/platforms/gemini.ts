@@ -18,6 +18,8 @@ const SELECTORS = {
     modelResponse: 'model-response',
     // The rendered markdown text within a model response
     responseText: '.response-content, .markdown, message-content',
+    // Thinking/thoughts sections to exclude from export
+    thinkingElements: 'model-thoughts, .thoughts-container, .thoughts-content, .thinking-content',
     // The sidebar nav where we inject our button
     nav: 'bard-sidenav, .conversation-list, nav',
     // Conversation title in sidebar
@@ -25,6 +27,7 @@ const SELECTORS = {
 }
 
 export class GeminiAdapter implements PlatformAdapter {
+    readonly platformName = 'Gemini'
     readonly hostnames = ['gemini.google.com']
 
     checkIfConversationStarted(): boolean {
@@ -79,17 +82,26 @@ export class GeminiAdapter implements PlatformAdapter {
     injectUI(getContainer: () => HTMLElement): void {
         let injected = false
 
+        const applyCompactStyle = (container: HTMLElement) => {
+            container.setAttribute('data-exporter-compact', '')
+            container.style.padding = '4px 8px'
+            container.style.width = '100%'
+            container.style.boxSizing = 'border-box'
+            container.style.maxWidth = '100%'
+            container.style.overflow = 'hidden'
+        }
+
         const tryInject = () => {
             if (injected) return
 
-            // Look for the bottom controls in the side navigation
+            // Insert inside the bottom action list (Activity, Settings, etc.)
             const bottomControls = document.querySelector<HTMLElement>('mat-action-list.desktop-controls')
-            if (bottomControls && bottomControls.parentElement) {
+            if (bottomControls) {
                 injected = true
                 const container = getContainer()
-                container.style.padding = '8px'
-                bottomControls.parentElement.insertBefore(container, bottomControls)
-                console.warn('[Exporter] Injected into Gemini sidebar above controls', bottomControls)
+                applyCompactStyle(container)
+                bottomControls.prepend(container)
+                console.warn('[Exporter] Injected into Gemini desktop-controls', bottomControls)
                 return
             }
 
@@ -105,7 +117,7 @@ export class GeminiAdapter implements PlatformAdapter {
 
             injected = true
             const container = getContainer()
-            container.style.padding = '8px'
+            applyCompactStyle(container)
             sidebar.prepend(container)
             console.warn('[Exporter] Injected into Gemini sidebar', sidebar)
         }
@@ -127,6 +139,13 @@ export class GeminiAdapter implements PlatformAdapter {
         // Gemini URL: gemini.google.com/app/{id}
         const match = location.pathname.match(/\/app\/([a-z0-9]+)/i)
         return match ? match[1] : null
+    }
+
+    private extractModelText(modelEl: Element): string {
+        const clone = modelEl.cloneNode(true) as Element
+        clone.querySelectorAll(SELECTORS.thinkingElements).forEach(el => el.remove())
+        const textEl = clone.querySelector(SELECTORS.responseText) ?? clone
+        return textEl.textContent?.trim() ?? ''
     }
 
     private extractTitle(): string {
@@ -171,9 +190,7 @@ export class GeminiAdapter implements PlatformAdapter {
             // Extract model response
             const modelEl = turn.querySelector(SELECTORS.modelResponse)
             if (modelEl) {
-                // Prefer inner response-content div; fall back to full element text
-                const textEl = modelEl.querySelector(SELECTORS.responseText) ?? modelEl
-                const text = textEl.textContent?.trim() ?? ''
+                const text = this.extractModelText(modelEl)
                 const id = `assistant-${i}`
                 nodes.push({
                     id,

@@ -46,5 +46,7 @@
   "Select a source to load conversations": "請在上方選擇一個專案以載入對話。",
   "Search": "搜尋",
   "Last 100": "最新 100 條",
-  "No results": "無結果"
+  "No results": "無結果",
+  "Copy Text Attachments": "複製文字含附件",
+  "Copy Text Attachments Description": "複製文字時是否包含附件內容（如上傳檔案的擷取文字）。"
 }
