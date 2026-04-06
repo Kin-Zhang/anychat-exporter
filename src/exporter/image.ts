@@ -54,6 +54,80 @@ function findGeminiThread(): HTMLElement | null {
 }
 
 /**
+ * Find the container wrapping AI Studio chat turns (ms-chat-turn).
+ * Walk up from the first turn to find a reasonable-width ancestor.
+ */
+function findAIStudioThread(): HTMLElement | null {
+    const firstTurn = document.querySelector<HTMLElement>('ms-chat-turn')
+    if (!firstTurn) return null
+
+    // Walk up to find the nearest scrollable container or .chunk-editor-main
+    let candidate: HTMLElement | null = firstTurn.parentElement
+    let best: HTMLElement | null = firstTurn
+    const maxWidth = window.innerWidth * 0.80
+    while (candidate && candidate !== document.body) {
+        if (candidate.classList.contains('chunk-editor-main')) return candidate
+        const rect = candidate.getBoundingClientRect()
+        if (rect.width > maxWidth) break
+        if (rect.height > 0) best = candidate
+        candidate = candidate.parentElement as HTMLElement | null
+    }
+    return best
+}
+
+/**
+ * Use html-to-image for AI Studio — same approach as Gemini since it also
+ * uses Angular custom elements that html2canvas cannot handle.
+ */
+async function takeAIStudioScreenshot(threadEl: HTMLElement, isDarkMode: boolean): Promise<string | null> {
+    const ratio = window.devicePixelRatio || 1
+    const scale = ratio * 2
+
+    const bg = getComputedStyle(document.body).backgroundColor || (isDarkMode ? '#1b1b1f' : '#ffffff')
+
+    const prevOverflow = threadEl.style.overflow
+    const prevHeight = threadEl.style.height
+    const prevMaxHeight = threadEl.style.maxHeight
+    threadEl.style.overflow = 'visible'
+    threadEl.style.height = 'auto'
+    threadEl.style.maxHeight = 'none'
+
+    await new Promise(r => requestAnimationFrame(r))
+
+    const fullWidth = threadEl.scrollWidth
+    const fullHeight = threadEl.scrollHeight
+
+    try {
+        const dataUrl = await htmlToImage.toPng(threadEl, {
+            pixelRatio: scale,
+            backgroundColor: bg,
+            canvasWidth: fullWidth,
+            canvasHeight: fullHeight,
+            width: fullWidth,
+            height: fullHeight,
+            filter: (node: Node) => {
+                if (!(node instanceof Element)) return true
+                const tag = node.tagName.toLowerCase()
+                if (tag === 'ms-thought-chunk') return false
+                const skipClasses = ['bottom-overlay', 'input-area', 'action-buttons']
+                if (skipClasses.some(cls => node.classList.contains(cls))) return false
+                return true
+            },
+        })
+        return dataUrl.replace(/^data:image\/[^;]/, 'data:application/octet-stream')
+    }
+    catch (error) {
+        console.error('[Exporter] html-to-image failed for AI Studio', error)
+        return null
+    }
+    finally {
+        threadEl.style.overflow = prevOverflow
+        threadEl.style.height = prevHeight
+        threadEl.style.maxHeight = prevMaxHeight
+    }
+}
+
+/**
  * Use html-to-image for Gemini — it handles Shadow DOM and custom elements
  * that html2canvas cannot render, which caused the export to freeze/hang.
  *
@@ -130,12 +204,22 @@ export async function exportToPng(fileNameFormat: string) {
     let thread = document.querySelector('#thread div:has(> [data-testid="conversation-turn-1"])')
     let isClaude = false
     let isGemini = false
+    let isAIStudio = false
 
     if (!thread) {
         const claudeMessages = document.querySelectorAll('[data-test-render-count]')
         if (claudeMessages.length > 0) {
             thread = claudeMessages[0].parentElement
             isClaude = true
+        }
+    }
+
+    // AI Studio: ms-chat-turn custom elements
+    if (!thread) {
+        const aiStudioThread = findAIStudioThread()
+        if (aiStudioThread) {
+            thread = aiStudioThread
+            isAIStudio = true
         }
     }
 
@@ -153,12 +237,31 @@ export async function exportToPng(fileNameFormat: string) {
         return false
     }
 
-    const isDarkMode = document.documentElement.classList.contains('dark') || document.documentElement.getAttribute('data-mode') === 'dark'
+    const isDarkMode = document.documentElement.classList.contains('dark')
+        || document.documentElement.getAttribute('data-mode') === 'dark'
+        || document.body.classList.contains('dark-theme')
 
     effect.add(() => {
         const style = document.createElement('style')
 
-        if (isGemini) {
+        if (isAIStudio) {
+            const bg = getComputedStyle(document.body).backgroundColor || (isDarkMode ? '#1b1b1f' : '#ffffff')
+            style.textContent = `
+                ms-chat-turn, .chunk-editor-main {
+                    background-color: ${bg};
+                }
+                ms-thought-chunk,
+                .bottom-overlay,
+                .input-area,
+                .chat-bottom-overlay {
+                    display: none !important;
+                }
+                img {
+                    display: initial !important;
+                }
+            `
+        }
+        else if (isGemini) {
             // For Gemini we use html-to-image which handles Shadow DOM natively.
             // We still inject a minimal style to stabilise backgrounds.
             const bg = getComputedStyle(document.body).backgroundColor || (isDarkMode ? '#1e1f20' : '#ffffff')
@@ -254,8 +357,10 @@ export async function exportToPng(fileNameFormat: string) {
 
     let dataUrl: string | null = null
 
-    if (isGemini) {
-        // Use html-to-image for Gemini — handles Shadow DOM that html2canvas cannot
+    if (isAIStudio) {
+        dataUrl = await takeAIStudioScreenshot(threadEl, isDarkMode)
+    }
+    else if (isGemini) {
         dataUrl = await takeGeminiScreenshot(threadEl, isDarkMode)
     }
     else {
@@ -322,6 +427,9 @@ export async function exportToPng(fileNameFormat: string) {
     }
     if (!chatId && isGemini) {
         chatId = location.pathname.match(/\/app\/([a-z0-9]+)/i)?.[1] || null
+    }
+    if (!chatId && isAIStudio) {
+        chatId = location.pathname.match(/\/prompts\/([^/]+)/i)?.[1] || null
     }
 
     const fileName = getFileNameWithFormat(fileNameFormat, 'png', { chatId: chatId || undefined })
