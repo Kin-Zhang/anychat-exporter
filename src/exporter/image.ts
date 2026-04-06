@@ -55,76 +55,157 @@ function findGeminiThread(): HTMLElement | null {
 
 /**
  * Find the container wrapping AI Studio chat turns (ms-chat-turn).
- * Walk up from the first turn to find a reasonable-width ancestor.
+ *
+ * IMPORTANT: We must avoid returning `ms-autoscroll-container` because it has
+ * `container-type: size` (CSS Container Queries) which html2canvas cannot handle.
+ * Target `.chat-session-content` instead — it directly holds all turns with safe CSS.
  */
 function findAIStudioThread(): HTMLElement | null {
+    // Best: the named container that directly wraps all turns
+    const sessionContent = document.querySelector<HTMLElement>('.chat-session-content')
+    if (sessionContent && sessionContent.querySelectorAll('ms-chat-turn').length > 0) {
+        return sessionContent
+    }
+
+    // Fallback: walk up from first turn, avoiding container-type elements
     const firstTurn = document.querySelector<HTMLElement>('ms-chat-turn')
     if (!firstTurn) return null
-
-    // Walk up to find the nearest scrollable container or .chunk-editor-main
-    let candidate: HTMLElement | null = firstTurn.parentElement
-    let best: HTMLElement | null = firstTurn
-    const maxWidth = window.innerWidth * 0.80
-    while (candidate && candidate !== document.body) {
-        if (candidate.classList.contains('chunk-editor-main')) return candidate
-        const rect = candidate.getBoundingClientRect()
-        if (rect.width > maxWidth) break
-        if (rect.height > 0) best = candidate
-        candidate = candidate.parentElement as HTMLElement | null
-    }
-    return best
+    return firstTurn.parentElement || firstTurn
 }
 
 /**
- * Use html-to-image for AI Studio — same approach as Gemini since it also
- * uses Angular custom elements that html2canvas cannot handle.
+ * Take screenshot of AI Studio chat. The DOM hierarchy is:
+ *   ms-autoscroll-container (overflow:auto; height:100%; container-type:size)
+ *     └── div
+ *           └── div.chat-session-content  ← our target
+ *                 └── ms-chat-turn × N
+ *
+ * We must temporarily expand ALL scroll ancestors to reveal the full content,
+ * and also disable `container-type` which breaks html2canvas.
+ * Uses html-to-image (better Angular rendering), then falls back to html2canvas.
  */
 async function takeAIStudioScreenshot(threadEl: HTMLElement, isDarkMode: boolean): Promise<string | null> {
     const ratio = window.devicePixelRatio || 1
     const scale = ratio * 2
-
     const bg = getComputedStyle(document.body).backgroundColor || (isDarkMode ? '#1b1b1f' : '#ffffff')
 
-    const prevOverflow = threadEl.style.overflow
-    const prevHeight = threadEl.style.height
-    const prevMaxHeight = threadEl.style.maxHeight
-    threadEl.style.overflow = 'visible'
-    threadEl.style.height = 'auto'
-    threadEl.style.maxHeight = 'none'
+    // Save target element's original styles
+    const savedTarget = {
+        width: threadEl.style.width,
+        minWidth: threadEl.style.minWidth,
+        maxWidth: threadEl.style.maxWidth,
+        margin: threadEl.style.margin,
+    }
+    // Force the target to render at its natural max-width (1000px), not squeezed by sidebar
+    threadEl.style.width = '1000px'
+    threadEl.style.minWidth = '1000px'
+    threadEl.style.margin = '0'
+
+    // Expand ALL scroll ancestors so the full conversation is visible
+    const saved: Array<{ el: HTMLElement; ov: string; h: string; mh: string; ct: string; w: string; mw: string }> = []
+    let anc: HTMLElement | null = threadEl.parentElement
+    while (anc && anc !== document.body) {
+        const cs = getComputedStyle(anc)
+        const needsExpand = cs.overflow !== 'visible' || cs.overflowY !== 'visible'
+            || (cs as any).containerType !== 'normal'
+        // Also expand width on all ancestors to accommodate wider content
+        saved.push({
+            el: anc,
+            ov: anc.style.overflow,
+            h: anc.style.height,
+            mh: anc.style.maxHeight,
+            ct: anc.style.getPropertyValue('container-type'),
+            w: anc.style.width,
+            mw: anc.style.minWidth,
+        })
+        if (needsExpand) {
+            anc.style.overflow = 'visible'
+            anc.style.height = 'auto'
+            anc.style.maxHeight = 'none'
+            anc.style.setProperty('container-type', 'normal')
+        }
+        anc.style.width = 'auto'
+        anc.style.minWidth = '1000px'
+        anc = anc.parentElement
+    }
 
     await new Promise(r => requestAnimationFrame(r))
 
     const fullWidth = threadEl.scrollWidth
     const fullHeight = threadEl.scrollHeight
+    let dataUrl: string | null = null
 
+    // Try html-to-image first — preserves Angular rendered output better
     try {
-        const dataUrl = await htmlToImage.toPng(threadEl, {
+        const url = await htmlToImage.toPng(threadEl, {
             pixelRatio: scale,
             backgroundColor: bg,
-            canvasWidth: fullWidth,
-            canvasHeight: fullHeight,
             width: fullWidth,
             height: fullHeight,
+            skipFonts: true,
             filter: (node: Node) => {
                 if (!(node instanceof Element)) return true
                 const tag = node.tagName.toLowerCase()
                 if (tag === 'ms-thought-chunk') return false
-                const skipClasses = ['bottom-overlay', 'input-area', 'action-buttons']
-                if (skipClasses.some(cls => node.classList.contains(cls))) return false
+                const cls = node.classList
+                if (cls.contains('bottom-overlay') || cls.contains('chat-bottom-overlay')) return false
                 return true
             },
         })
-        return dataUrl.replace(/^data:image\/[^;]/, 'data:application/octet-stream')
+        if (url && url !== 'data:,') {
+            dataUrl = url.replace(/^data:image\/[^;]/, 'data:application/octet-stream')
+        }
     }
-    catch (error) {
-        console.error('[Exporter] html-to-image failed for AI Studio', error)
-        return null
+    catch (e) {
+        console.warn('[Exporter] html-to-image failed for AI Studio', e)
     }
-    finally {
-        threadEl.style.overflow = prevOverflow
-        threadEl.style.height = prevHeight
-        threadEl.style.maxHeight = prevMaxHeight
+
+    // Fallback: html2canvas (container-type is already neutralised)
+    if (!dataUrl) {
+        console.warn('[Exporter] Trying html2canvas fallback for AI Studio')
+        const passLimit = 5
+        const tryCanvas = async (additionalScale = 1, pass = 1): Promise<string | null> => {
+            try {
+                const canvas = await html2canvas(threadEl, {
+                    scale: ratio * 2 * additionalScale,
+                    useCORS: true,
+                    scrollX: -window.scrollX,
+                    scrollY: -window.scrollY,
+                    windowWidth: fullWidth,
+                    windowHeight: fullHeight,
+                    ignoreElements: fnIgnoreElements,
+                })
+                const url = canvas?.toDataURL('image/png', 1)
+                    ?.replace(/^data:image\/[^;]/, 'data:application/octet-stream')
+                if (url && url !== 'data:,') return url
+            }
+            catch (e) {
+                console.warn(`[Exporter] html2canvas pass ${pass} failed`, e)
+            }
+            if (pass >= passLimit) return null
+            return tryCanvas(additionalScale / 1.4, pass + 1)
+        }
+        dataUrl = await tryCanvas()
     }
+
+    // Restore target element styles
+    threadEl.style.width = savedTarget.width
+    threadEl.style.minWidth = savedTarget.minWidth
+    threadEl.style.maxWidth = savedTarget.maxWidth
+    threadEl.style.margin = savedTarget.margin
+
+    // Restore all ancestor styles
+    for (const { el, ov, h, mh, ct, w, mw } of saved) {
+        el.style.overflow = ov
+        el.style.height = h
+        el.style.maxHeight = mh
+        el.style.width = w
+        el.style.minWidth = mw
+        if (ct) el.style.setProperty('container-type', ct)
+        else el.style.removeProperty('container-type')
+    }
+
+    return dataUrl
 }
 
 /**
@@ -357,22 +438,15 @@ export async function exportToPng(fileNameFormat: string) {
 
     let dataUrl: string | null = null
 
-    if (isAIStudio) {
-        dataUrl = await takeAIStudioScreenshot(threadEl, isDarkMode)
-    }
-    else if (isGemini) {
-        dataUrl = await takeGeminiScreenshot(threadEl, isDarkMode)
-    }
-    else {
-        // Use html2canvas for ChatGPT and Claude (proven working)
+    const takeHtml2canvasScreenshot = async (el: HTMLElement): Promise<string | null> => {
         const passLimit = 10
-        const takeScreenshot = async (width: number, height: number, additionalScale = 1, currentPass = 1): Promise<string | null> => {
+        const take = async (width: number, height: number, additionalScale = 1, currentPass = 1): Promise<string | null> => {
             const ratio = window.devicePixelRatio || 1
-            const scale = ratio * 2 * additionalScale // scale up to 2x to avoid blurry images
+            const scale = ratio * 2 * additionalScale
 
             let canvas: HTMLCanvasElement | null = null
             try {
-                canvas = await html2canvas(threadEl, {
+                canvas = await html2canvas(el, {
                     scale,
                     useCORS: true,
                     scrollX: -window.scrollX,
@@ -383,9 +457,7 @@ export async function exportToPng(fileNameFormat: string) {
                 })
             }
             catch (error) {
-                // eslint-disable-next-line no-console
-                console.warn(`ChatGPT Exporter:takeScreenshot with height=${height} width=${width} scale=${scale}`)
-                console.error('Failed to take screenshot', error)
+                console.warn(`[Exporter] html2canvas pass ${currentPass} failed`, error)
             }
 
             const context = canvas?.getContext('2d')
@@ -394,24 +466,24 @@ export async function exportToPng(fileNameFormat: string) {
             const url = canvas?.toDataURL('image/png', 1)
                 .replace(/^data:image\/[^;]/, 'data:application/octet-stream')
 
-            /**
-             * corrupted image
-             * meaning we might hit on the canvas size limit
-             * See https://developer.mozilla.org/en-US/docs/Web/HTML/Element/canvas#maximum_canvas_size
-             * Chromium will not throw, we can only get an empty canvas
-             * Firefox will throw "DOMException: CanvasRenderingContext2D.scale: Canvas exceeds max size."
-             */
             if (!canvas || !url || url === 'data:,') {
                 if (currentPass > passLimit) return null
-
-                // 1.4 ^ 5 ~= 5.37, should be enough for most cases
-                return takeScreenshot(width, height, additionalScale / 1.4, currentPass + 1)
+                return take(width, height, additionalScale / 1.4, currentPass + 1)
             }
 
             return url
         }
+        return take(el.scrollWidth, el.scrollHeight)
+    }
 
-        dataUrl = await takeScreenshot(thread.scrollWidth, thread.scrollHeight)
+    if (isAIStudio) {
+        dataUrl = await takeAIStudioScreenshot(threadEl, isDarkMode)
+    }
+    else if (isGemini) {
+        dataUrl = await takeGeminiScreenshot(threadEl, isDarkMode)
+    }
+    else {
+        dataUrl = await takeHtml2canvasScreenshot(threadEl)
     }
 
     effect.dispose()

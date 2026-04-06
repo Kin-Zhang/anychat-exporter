@@ -24301,59 +24301,116 @@ ${content2.text}
     return best;
   }
   function findAIStudioThread() {
+    const sessionContent = document.querySelector(".chat-session-content");
+    if (sessionContent && sessionContent.querySelectorAll("ms-chat-turn").length > 0) {
+      return sessionContent;
+    }
     const firstTurn = document.querySelector("ms-chat-turn");
     if (!firstTurn) return null;
-    let candidate = firstTurn.parentElement;
-    let best = firstTurn;
-    const maxWidth = window.innerWidth * 0.8;
-    while (candidate && candidate !== document.body) {
-      if (candidate.classList.contains("chunk-editor-main")) return candidate;
-      const rect = candidate.getBoundingClientRect();
-      if (rect.width > maxWidth) break;
-      if (rect.height > 0) best = candidate;
-      candidate = candidate.parentElement;
-    }
-    return best;
+    return firstTurn.parentElement || firstTurn;
   }
   async function takeAIStudioScreenshot(threadEl, isDarkMode) {
     const ratio = window.devicePixelRatio || 1;
     const scale = ratio * 2;
     const bg = getComputedStyle(document.body).backgroundColor || (isDarkMode ? "#1b1b1f" : "#ffffff");
-    const prevOverflow = threadEl.style.overflow;
-    const prevHeight = threadEl.style.height;
-    const prevMaxHeight = threadEl.style.maxHeight;
-    threadEl.style.overflow = "visible";
-    threadEl.style.height = "auto";
-    threadEl.style.maxHeight = "none";
+    const savedTarget = {
+      width: threadEl.style.width,
+      minWidth: threadEl.style.minWidth,
+      maxWidth: threadEl.style.maxWidth,
+      margin: threadEl.style.margin
+    };
+    threadEl.style.width = "1000px";
+    threadEl.style.minWidth = "1000px";
+    threadEl.style.margin = "0";
+    const saved = [];
+    let anc = threadEl.parentElement;
+    while (anc && anc !== document.body) {
+      const cs = getComputedStyle(anc);
+      const needsExpand = cs.overflow !== "visible" || cs.overflowY !== "visible" || cs.containerType !== "normal";
+      saved.push({
+        el: anc,
+        ov: anc.style.overflow,
+        h: anc.style.height,
+        mh: anc.style.maxHeight,
+        ct: anc.style.getPropertyValue("container-type"),
+        w: anc.style.width,
+        mw: anc.style.minWidth
+      });
+      if (needsExpand) {
+        anc.style.overflow = "visible";
+        anc.style.height = "auto";
+        anc.style.maxHeight = "none";
+        anc.style.setProperty("container-type", "normal");
+      }
+      anc.style.width = "auto";
+      anc.style.minWidth = "1000px";
+      anc = anc.parentElement;
+    }
     await new Promise((r2) => requestAnimationFrame(r2));
     const fullWidth = threadEl.scrollWidth;
     const fullHeight = threadEl.scrollHeight;
+    let dataUrl = null;
     try {
-      const dataUrl = await toPng(threadEl, {
+      const url = await toPng(threadEl, {
         pixelRatio: scale,
         backgroundColor: bg,
-        canvasWidth: fullWidth,
-        canvasHeight: fullHeight,
         width: fullWidth,
         height: fullHeight,
+        skipFonts: true,
         filter: (node2) => {
           if (!(node2 instanceof Element)) return true;
           const tag = node2.tagName.toLowerCase();
           if (tag === "ms-thought-chunk") return false;
-          const skipClasses = ["bottom-overlay", "input-area", "action-buttons"];
-          if (skipClasses.some((cls) => node2.classList.contains(cls))) return false;
+          const cls = node2.classList;
+          if (cls.contains("bottom-overlay") || cls.contains("chat-bottom-overlay")) return false;
           return true;
         }
       });
-      return dataUrl.replace(/^data:image\/[^;]/, "data:application/octet-stream");
-    } catch (error2) {
-      console.error("[Exporter] html-to-image failed for AI Studio", error2);
-      return null;
-    } finally {
-      threadEl.style.overflow = prevOverflow;
-      threadEl.style.height = prevHeight;
-      threadEl.style.maxHeight = prevMaxHeight;
+      if (url && url !== "data:,") {
+        dataUrl = url.replace(/^data:image\/[^;]/, "data:application/octet-stream");
+      }
+    } catch (e2) {
+      console.warn("[Exporter] html-to-image failed for AI Studio", e2);
     }
+    if (!dataUrl) {
+      console.warn("[Exporter] Trying html2canvas fallback for AI Studio");
+      const passLimit = 5;
+      const tryCanvas = async (additionalScale = 1, pass = 1) => {
+        var _a;
+        try {
+          const canvas = await html2canvas(threadEl, {
+            scale: ratio * 2 * additionalScale,
+            useCORS: true,
+            scrollX: -window.scrollX,
+            scrollY: -window.scrollY,
+            windowWidth: fullWidth,
+            windowHeight: fullHeight,
+            ignoreElements: fnIgnoreElements
+          });
+          const url = (_a = canvas == null ? void 0 : canvas.toDataURL("image/png", 1)) == null ? void 0 : _a.replace(/^data:image\/[^;]/, "data:application/octet-stream");
+          if (url && url !== "data:,") return url;
+        } catch (e2) {
+          console.warn(`[Exporter] html2canvas pass ${pass} failed`, e2);
+        }
+        if (pass >= passLimit) return null;
+        return tryCanvas(additionalScale / 1.4, pass + 1);
+      };
+      dataUrl = await tryCanvas();
+    }
+    threadEl.style.width = savedTarget.width;
+    threadEl.style.minWidth = savedTarget.minWidth;
+    threadEl.style.maxWidth = savedTarget.maxWidth;
+    threadEl.style.margin = savedTarget.margin;
+    for (const { el, ov, h: h2, mh, ct, w: w2, mw } of saved) {
+      el.style.overflow = ov;
+      el.style.height = h2;
+      el.style.maxHeight = mh;
+      el.style.width = w2;
+      el.style.minWidth = mw;
+      if (ct) el.style.setProperty("container-type", ct);
+      else el.style.removeProperty("container-type");
+    }
+    return dataUrl;
   }
   async function takeGeminiScreenshot(threadEl, isDarkMode) {
     const ratio = window.devicePixelRatio || 1;
@@ -24544,18 +24601,14 @@ ${content2.text}
     effect.run();
     await sleep(100);
     let dataUrl = null;
-    if (isAIStudio) {
-      dataUrl = await takeAIStudioScreenshot(threadEl, isDarkMode);
-    } else if (isGemini) {
-      dataUrl = await takeGeminiScreenshot(threadEl, isDarkMode);
-    } else {
+    const takeHtml2canvasScreenshot = async (el) => {
       const passLimit = 10;
-      const takeScreenshot = async (width, height, additionalScale = 1, currentPass = 1) => {
+      const take = async (width, height, additionalScale = 1, currentPass = 1) => {
         const ratio = window.devicePixelRatio || 1;
         const scale = ratio * 2 * additionalScale;
         let canvas = null;
         try {
-          canvas = await html2canvas(threadEl, {
+          canvas = await html2canvas(el, {
             scale,
             useCORS: true,
             scrollX: -window.scrollX,
@@ -24565,19 +24618,25 @@ ${content2.text}
             ignoreElements: fnIgnoreElements
           });
         } catch (error2) {
-          console.warn(`ChatGPT Exporter:takeScreenshot with height=${height} width=${width} scale=${scale}`);
-          console.error("Failed to take screenshot", error2);
+          console.warn(`[Exporter] html2canvas pass ${currentPass} failed`, error2);
         }
         const context = canvas == null ? void 0 : canvas.getContext("2d");
         if (context) context.imageSmoothingEnabled = false;
         const url = canvas == null ? void 0 : canvas.toDataURL("image/png", 1).replace(/^data:image\/[^;]/, "data:application/octet-stream");
         if (!canvas || !url || url === "data:,") {
           if (currentPass > passLimit) return null;
-          return takeScreenshot(width, height, additionalScale / 1.4, currentPass + 1);
+          return take(width, height, additionalScale / 1.4, currentPass + 1);
         }
         return url;
       };
-      dataUrl = await takeScreenshot(thread.scrollWidth, thread.scrollHeight);
+      return take(el.scrollWidth, el.scrollHeight);
+    };
+    if (isAIStudio) {
+      dataUrl = await takeAIStudioScreenshot(threadEl, isDarkMode);
+    } else if (isGemini) {
+      dataUrl = await takeGeminiScreenshot(threadEl, isDarkMode);
+    } else {
+      dataUrl = await takeHtml2canvasScreenshot(threadEl);
     }
     effect.dispose();
     if (!dataUrl) {
