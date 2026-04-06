@@ -1,5 +1,21 @@
 # Changelog
 
+## [3.0.0](https://github.com/Kin-Zhang/anychat-exporter/compare/userscript-v2.1.2...userscript-v3.0.0) (2026-04-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* add support to ai google studio
+
+### Features
+
+* add support to ai google studio ([7025b5f](https://github.com/Kin-Zhang/anychat-exporter/commit/7025b5f17aaa100cf3c6c0639a1bc7bc26460489))
+
+
+### Bug Fixes
+
+* make google studio save image fn work ([b81b873](https://github.com/Kin-Zhang/anychat-exporter/commit/b81b873150e75fee83b7125e1c73e3e29c162999))
+
 ## [2.1.2](https://github.com/Kin-Zhang/anychat-exporter/compare/userscript-v3.30.0...userscript-v2.1.2) (2026-03-17)
 
 
