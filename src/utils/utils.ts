@@ -29,10 +29,35 @@ export function timestamp() {
 }
 
 export function getColorScheme(): 'light' | 'dark' {
-    const scheme = document.documentElement.style.getPropertyValue('color-scheme')
-    if (scheme === 'dark') return 'dark'
-    if (scheme === 'light') return 'light'
-    // Fallback: check system preference or class-based dark mode
+    const html = document.documentElement
+    const body = document.body
+
+    // 1. Inline color-scheme CSS property (ChatGPT sets this)
+    const inlineScheme = html.style.getPropertyValue('color-scheme')
+    if (inlineScheme === 'dark') return 'dark'
+    if (inlineScheme === 'light') return 'light'
+
+    // 2. Class-based dark mode (.dark, .dark-theme — ChatGPT, Claude)
+    if (html.classList.contains('dark') || html.classList.contains('dark-theme')
+        || body.classList.contains('dark') || body.classList.contains('dark-theme')) {
+        return 'dark'
+    }
+
+    // 3. data-theme attribute (Gemini, some other sites)
+    const dataTheme = html.getAttribute('data-theme') || body.getAttribute('data-theme')
+    if (dataTheme === 'dark') return 'dark'
+    if (dataTheme === 'light') return 'light'
+
+    // 4. Computed background color heuristic (works for AI Studio and others
+    //    that change the background without using a recognised attribute)
+    const bg = window.getComputedStyle(body).backgroundColor
+    const match = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
+    if (match) {
+        const luminance = 0.299 * +match[1] + 0.587 * +match[2] + 0.114 * +match[3]
+        if (luminance < 80) return 'dark'
+    }
+
+    // 5. System preference fallback
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 

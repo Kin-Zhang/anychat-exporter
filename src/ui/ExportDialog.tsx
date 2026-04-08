@@ -5,6 +5,7 @@ import { archiveConversation, deleteConversation, fetchAllConversations, fetchCo
 import { exportAllToHtml } from '../exporter/html'
 import { exportAllToJson, exportAllToOfficialJson } from '../exporter/json'
 import { exportAllToMarkdown } from '../exporter/markdown'
+import { useColorScheme } from '../hooks/useColorScheme'
 import { RequestQueue } from '../utils/queue'
 import { CheckBox } from './CheckBox'
 import { IconCross, IconLoading, IconUpload } from './Icons'
@@ -481,6 +482,7 @@ interface ExportDialogProps {
 }
 
 export const ExportDialog: FC<ExportDialogProps> = ({ format, open, onOpenChange, children }) => {
+    const isDark = useColorScheme() === 'dark'
     return (
         <Dialog.Root
             open={open}
@@ -491,8 +493,10 @@ export const ExportDialog: FC<ExportDialogProps> = ({ format, open, onOpenChange
             </Dialog.Trigger>
             <Dialog.Portal>
                 <Dialog.Overlay className="DialogOverlay" />
-                <Dialog.Content className="DialogContent">
-                    {open && <DialogContent format={format} />}
+                <Dialog.Content className={`DialogContent${isDark ? ' dark' : ''}`}>
+                    <div className={isDark ? 'dark' : undefined}>
+                        {open && <DialogContent format={format} />}
+                    </div>
                 </Dialog.Content>
             </Dialog.Portal>
         </Dialog.Root>

@@ -25,7 +25,7 @@
     animation: contentShow 150ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.dark .DialogContent {
+.DialogContent.dark {
     background-color: #2a2a2a;
     border-color: #40414f;
     border-width: 1px;
@@ -44,7 +44,7 @@
     font-size: 20px;
 }
 
-.dark .DialogTitle {
+.DialogContent.dark .DialogTitle {
     color: #fff;
 }
 
@@ -80,11 +80,11 @@
 .Button.neutral:hover {
     background-color: rgba(111, 110, 119, 0.1);
 }
-.dark .Button.neutral {
+.DialogContent.dark .Button.neutral {
     color: #a0a0a8;
     border-color: #a0a0a8;
 }
-.dark .Button.neutral:hover {
+.DialogContent.dark .Button.neutral:hover {
     background-color: rgba(160, 160, 168, 0.1);
 }
 .Button:disabled {
@@ -131,7 +131,7 @@
     text-align: right;
 }
 
-.dark .Label {
+.DialogContent.dark .Label {
     color: #fff;
 }
 
@@ -152,7 +152,7 @@
     outline: none;
 }
 
-.dark .Input {
+.DialogContent.dark .Input {
     background-color: #2f2f2f;
     color: #fff;
     box-shadow: 0 0 0 1px #6f6e77;
@@ -165,7 +165,7 @@
     margin-bottom: 4px;
 }
 
-.dark .Description {
+.DialogContent.dark .Description {
     color: #bcbcbc;
 }
 
