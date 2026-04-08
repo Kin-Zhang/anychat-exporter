@@ -153,7 +153,7 @@ async function takeAIStudioScreenshot(threadEl: HTMLElement, isDarkMode: boolean
             },
         })
         if (url && url !== 'data:,') {
-            dataUrl = url.replace(/^data:image\/[^;]/, 'data:application/octet-stream')
+            dataUrl = url.replace(/^data:image\/[^;]+/, 'data:application/octet-stream')
         }
     }
     catch (e) {
@@ -176,7 +176,7 @@ async function takeAIStudioScreenshot(threadEl: HTMLElement, isDarkMode: boolean
                     ignoreElements: fnIgnoreElements,
                 })
                 const url = canvas?.toDataURL('image/png', 1)
-                    ?.replace(/^data:image\/[^;]/, 'data:application/octet-stream')
+                    ?.replace(/^data:image\/[^;]+/, 'data:application/octet-stream')
                 if (url && url !== 'data:,') return url
             }
             catch (e) {
@@ -260,7 +260,7 @@ async function takeGeminiScreenshot(threadEl: HTMLElement, isDarkMode: boolean):
                 return true
             },
         })
-        return dataUrl.replace(/^data:image\/[^;]/, 'data:application/octet-stream')
+        return dataUrl.replace(/^data:image\/[^;]+/, 'data:application/octet-stream')
     }
     catch (error) {
         console.error('[Exporter] html-to-image failed for Gemini', error)
@@ -464,7 +464,7 @@ export async function exportToPng(fileNameFormat: string) {
             if (context) context.imageSmoothingEnabled = false
 
             const url = canvas?.toDataURL('image/png', 1)
-                .replace(/^data:image\/[^;]/, 'data:application/octet-stream')
+                .replace(/^data:image\/[^;]+/, 'data:application/octet-stream')
 
             if (!canvas || !url || url === 'data:,') {
                 if (currentPass > passLimit) return null

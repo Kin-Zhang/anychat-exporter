@@ -134,6 +134,7 @@ export class ClaudeAdapter implements PlatformAdapter {
         // Also watch for navigation changes (switching conversations)
         const observer = new MutationObserver(() => {
             if (!injected) tryInject()
+            else observer.disconnect()
         })
         observer.observe(document.body, { childList: true, subtree: true })
     }

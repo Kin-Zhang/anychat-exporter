@@ -104,9 +104,11 @@ function conversationToHtml(conversation: ConversationResult, avatar: string, me
             }
         }
 
-        const model = message?.metadata?.model_slug === 'gpt-4' ? 'GPT-4' : 'GPT-3'
+        // Determine CSS class for avatar background (template only has GPT-3/GPT-4 styles)
+        const authorSlug = message?.metadata?.model_slug ?? ''
+        const authorCssClass = authorSlug.startsWith('gpt-3') ? 'GPT-3' : 'GPT-4'
         const author = transformAuthor(message.author, model)
-        const authorType = message.author.role === 'user' ? 'user' : model
+        const authorType = message.author.role === 'user' ? 'user' : authorCssClass
         const avatarEl = message.author.role === 'user'
             ? `<img alt="${author}" />`
             : '<svg width="41" height="41"><use xlink:href="#chatgpt" /></svg>'
@@ -196,7 +198,7 @@ function conversationToHtml(conversation: ConversationResult, avatar: string, me
                 .replace('{timestamp}', timestamp())
                 .replace('{source}', source)
                 .replace('{model}', model)
-                .replace('{mode_name}', modelSlug)
+                .replace('{model_name}', modelSlug)
                 .replace('{create_time}', unixTimestampToISOString(createTime))
                 .replace('{update_time}', unixTimestampToISOString(updateTime))
 

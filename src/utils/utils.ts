@@ -29,7 +29,11 @@ export function timestamp() {
 }
 
 export function getColorScheme(): 'light' | 'dark' {
-    return document.documentElement.style.getPropertyValue('color-scheme') as 'light' | 'dark'
+    const scheme = document.documentElement.style.getPropertyValue('color-scheme')
+    if (scheme === 'dark') return 'dark'
+    if (scheme === 'light') return 'light'
+    // Fallback: check system preference or class-based dark mode
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
 export function unixTimestampToISOString(timestamp: number) {

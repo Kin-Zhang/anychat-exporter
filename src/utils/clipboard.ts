@@ -1,7 +1,7 @@
-export function copyToClipboard(text: string) {
+export async function copyToClipboard(text: string) {
     try {
         // for modern browsers
-        navigator.clipboard.writeText(text)
+        await navigator.clipboard.writeText(text)
     }
     catch {
         const textarea = document.createElement('textarea')

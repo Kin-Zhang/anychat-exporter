@@ -61,7 +61,7 @@ export async function exportAllToMarkdown(fileNameFormat: string, apiConversatio
     return true
 }
 
-const LatexRegex = /(\s\$\$.+\$\$\s|\s\$.+\$\s|\\\[.+\\\]|\\\(.+\\\))|(^\$$[\S\s]+^\$$)|(^\$\$[\S\s]+^\$\$$)/gm
+const LatexRegex = /(\s\$\$.+?\$\$\s|\s\$.+?\$\s|\\\[.+?\\\]|\\\(.+?\\\))|(^\$$[\S\s]+?^\$$)|(^\$\$[\S\s]+?^\$\$$)/gm
 
 function conversationToMarkdown(conversation: ConversationResult, metaList?: ExportMeta[]) {
     const { id, title, model, modelSlug, createTime, updateTime, conversationNodes } = conversation
@@ -224,7 +224,7 @@ function transformFootNotes(
     }).join('\n')
 
     // Foot notes are placed at the end of the conversation node, not the end of the whole document
-    return `${output}\n\n${citationText}`
+    return citationText ? `${output}\n\n${citationText}` : output
 }
 
 /**

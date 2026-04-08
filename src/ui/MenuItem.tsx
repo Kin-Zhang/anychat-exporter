@@ -23,7 +23,7 @@ export const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
         const handleClick = typeof onClick === 'function'
             ? async (e: Event) => {
                 e.preventDefault()
-                if (loading) return
+                if (loading || disabled) return
 
                 try {
                     setLoading(true)
@@ -55,7 +55,6 @@ export const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
                 cursor-pointer
                 border border-menu ${className}`}
                 onClick={handleClick}
-                onTouchStart={handleClick}
                 aria-disabled={disabled}
                 title={title}
             >

@@ -5,6 +5,7 @@ type RequestFn<T> = () => Promise<T>
 interface RequestObject<T> {
     name: string
     request: RequestFn<T>
+    retries?: number
 }
 interface ProgressEvent {
     total: number
@@ -25,6 +26,7 @@ export class RequestQueue<T> {
     private status: 'IDLE' | 'IN_PROGRESS' | 'STOPPED' | 'COMPLETED' = 'IDLE'
 
     private readonly backoffMultiplier = 2
+    private readonly maxRetries = 3
     private backoff: number
 
     private total = 0
@@ -89,10 +91,18 @@ export class RequestQueue<T> {
             this.backoff = this.minBackoff // reset backoff on success
         }
         catch (error) {
-            console.error(`Request ${name} failed:`, error)
-            this.progress(name, 'retrying')
-            this.backoff = Math.min(this.backoff * this.backoffMultiplier, this.maxBackoff)
-            this.queue.unshift(requestObject) // add request back to the front of the queue
+            const retries = (requestObject.retries ?? 0) + 1
+            console.error(`Request ${name} failed (attempt ${retries}/${this.maxRetries}):`, error)
+            if (retries < this.maxRetries) {
+                this.progress(name, 'retrying')
+                this.backoff = Math.min(this.backoff * this.backoffMultiplier, this.maxBackoff)
+                this.queue.unshift({ ...requestObject, retries }) // retry at front of queue
+            }
+            else {
+                console.error(`Request ${name} exceeded max retries, skipping.`)
+                this.completed++ // count as processed so progress tracking stays accurate
+                this.backoff = this.minBackoff // reset backoff for next request
+            }
         }
 
         await sleep(this.backoff)

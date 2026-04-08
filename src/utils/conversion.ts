@@ -105,6 +105,17 @@ export function convertToOoba(conversation: ConversationResult): string {
         }
     }
 
+    // Handle last message if the loop exited before processing it (e.g. final user turn without a reply)
+    if (idx < messages.length) {
+        const lastMessage = messages[idx]
+        if (lastMessage.message?.content.content_type === 'text') {
+            const role = lastMessage.message.author.role
+            const text = (lastMessage.message.content.parts[0] as string | undefined) ?? ''
+            if (role === 'user') pairs.push([text, ''])
+            else if (role === 'assistant') pairs.push(['', text])
+        }
+    }
+
     const oobaData: OobaData = {
         internal: pairs,
         visible: JSON.parse(JSON.stringify(pairs)),

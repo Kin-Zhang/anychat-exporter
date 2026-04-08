@@ -226,7 +226,14 @@ const DialogContent: FC<DialogContentProps> = ({ format }) => {
 
         const fileReader = new FileReader()
         fileReader.onload = () => {
-            const data = JSON.parse(fileReader.result as string)
+            let data: unknown
+            try {
+                data = JSON.parse(fileReader.result as string)
+            }
+            catch {
+                alert(t('Invalid File Format'))
+                return
+            }
             if (!Array.isArray(data)) {
                 alert(t('Invalid File Format'))
                 return
@@ -454,7 +461,7 @@ const DialogContent: FC<DialogContentProps> = ({ format }) => {
                         <span>{`${progress.completed}/${progress.total}`}</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4 dark:bg-gray-700">
-                        <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${(progress.completed / progress.total) * 100}%` }} />
+                        <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${Math.round((progress.completed / (progress.total || 1)) * 100)}%` }} />
                     </div>
                 </>
             )}

@@ -129,6 +129,7 @@ export class GeminiAdapter implements PlatformAdapter {
 
         const observer = new MutationObserver(() => {
             if (!injected) tryInject()
+            else observer.disconnect()
         })
         observer.observe(document.body, { childList: true, subtree: true })
     }

@@ -54,7 +54,7 @@ export interface Citation {
 }
 
 export interface ContentReference {
-    type: 'grouped_webpages' | 'sources_footnote' | 'nav_list' | 'alt_text' & (string & {})
+    type: ('grouped_webpages' | 'sources_footnote' | 'nav_list' | 'alt_text') & (string & {})
     /** The text that was matched in the content, e.g., "citeturn0search3" */
     matched_text?: string
     start_idx: number
@@ -105,15 +105,15 @@ interface MessageMeta {
         }>
         run_id: string
         start_time: number
-        status: 'success' | 'error' & (string & {})
+        status: ('success' | 'error') & (string & {})
         update_time: number
     }
     args?: unknown
-    command?: 'click' | 'search' | 'quote' | 'quote_lines' | 'scroll' & (string & {})
+    command?: ('click' | 'search' | 'quote' | 'quote_lines' | 'scroll') & (string & {})
     finish_details?: {
         // stop: string
         stop_tokens?: number[]
-        type: 'stop' | 'interrupted' & (string & {})
+        type: ('stop' | 'interrupted') & (string & {})
     }
     is_complete?: boolean
     model_slug?: ModelSlug & (string & {})
@@ -199,7 +199,7 @@ interface MultiModalAudioTranscription {
 export interface ConversationNodeMessage {
     author: {
         role: AuthorRole
-        name?: 'browser' | 'python' & (string & {})
+        name?: ('browser' | 'python') & (string & {})
         metadata: unknown
     }
     content: {
@@ -257,7 +257,7 @@ export interface ConversationNodeMessage {
     // end_turn: boolean
     id: string
     metadata?: MessageMeta
-    recipient: 'all' | 'browser' | 'python' | 'dalle.text2im' & (string & {})
+    recipient: ('all' | 'browser' | 'python' | 'dalle.text2im') & (string & {})
     status: string
     end_turn?: boolean
     weight: number
@@ -308,7 +308,7 @@ export interface ApiConversations {
 export interface ApiGizmo {
     // weird nesting but ok
     gizmo: { gizmo: ApiProjectInfo }
-    conversations: { itmes: ApiConversationItem[] }
+    conversations: { items: ApiConversationItem[] }
 }
 
 export interface ApiProjectInfo {
@@ -491,7 +491,8 @@ async function replaceImageAssets(conversation: ApiConversation): Promise<void> 
 export async function fetchConversation(chatId: string, shouldReplaceAssets: boolean): Promise<ApiConversationWithId> {
     if (chatId.startsWith('__share__')) {
         const id = chatId.replace('__share__', '')
-        const shareConversation = getConversationFromSharePage() as ApiConversation
+        const shareConversation = getConversationFromSharePage()
+        if (!shareConversation) throw new Error('Failed to read conversation data from share page. The page may not have loaded yet or the format has changed.')
         await replaceImageAssets(shareConversation)
 
         return {
@@ -738,11 +739,16 @@ function extractModel(conversationMapping: Record<string, ConversationNode>) {
             model = ModelMapping[modelSlug]
         }
         else {
+            // Longest-prefix match: find the longest key that is a prefix of the slug
+            let longestMatch = ''
             Object.keys(ModelMapping).forEach((key) => {
-                if (modelSlug.startsWith(key)) {
-                    model = key
+                if (modelSlug.startsWith(key) && key.length > longestMatch.length) {
+                    longestMatch = key
                 }
             })
+            if (longestMatch) {
+                model = ModelMapping[longestMatch as keyof typeof ModelMapping]
+            }
         }
     }
 

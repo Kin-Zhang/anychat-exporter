@@ -217,7 +217,7 @@ function MenuInner({ container }: { container: HTMLDivElement }) {
                                 style={{
                                     'fill': 'var(--ce-menu-primary)',
                                     'stroke': 'var(--ce-border-light)',
-                                    'stoke-width': '2px',
+                                    'stroke-width': '2px',
                                 }}
                             />
                         )}
