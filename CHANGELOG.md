@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.0.1](https://github.com/Kin-Zhang/anychat-exporter/compare/userscript-v3.0.0...userscript-v3.0.1) (2026-04-09)
+
+
+### Bug Fixes
+
+* code review — bugs, memory leaks, data correctness, UI & CI ([3ad31b8](https://github.com/Kin-Zhang/anychat-exporter/commit/3ad31b8f3d65c5a05ae3789c0f9771cda6c7b1c4))
+* dark mode not applied to dialogs on Gemini and AI Studio ([b39fdae](https://github.com/Kin-Zhang/anychat-exporter/commit/b39fdaed79c359a673cc82e36ac3bc85b4a55382))
+
 ## [3.0.0](https://github.com/Kin-Zhang/anychat-exporter/compare/userscript-v2.1.2...userscript-v3.0.0) (2026-04-06)
 
 
