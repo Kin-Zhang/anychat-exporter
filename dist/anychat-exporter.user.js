@@ -3,7 +3,7 @@
 // @name:zh-CN         AnyChat Exporter
 // @name:zh-TW         AnyChat Exporter
 // @namespace          kin-zhang
-// @version            3.0.0
+// @version            3.0.1
 // @author             kin-zhang
 // @description        Easily export the whole AnyChat conversation history for further analysis or sharing.
 // @description:zh-CN  轻松导出 ChatGPT/Claude/Gemini 聊天记录，以便进一步分析或分享。
@@ -286,7 +286,7 @@ html {
     animation: contentShow 150ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.dark .DialogContent {
+.DialogContent.dark {
     background-color: #2a2a2a;
     border-color: #40414f;
     border-width: 1px;
@@ -305,7 +305,7 @@ html {
     font-size: 20px;
 }
 
-.dark .DialogTitle {
+.DialogContent.dark .DialogTitle {
     color: #fff;
 }
 
@@ -341,11 +341,11 @@ html {
 .Button.neutral:hover {
     background-color: rgba(111, 110, 119, 0.1);
 }
-.dark .Button.neutral {
+.DialogContent.dark .Button.neutral {
     color: #a0a0a8;
     border-color: #a0a0a8;
 }
-.dark .Button.neutral:hover {
+.DialogContent.dark .Button.neutral:hover {
     background-color: rgba(160, 160, 168, 0.1);
 }
 .Button:disabled {
@@ -392,7 +392,7 @@ html {
     text-align: right;
 }
 
-.dark .Label {
+.DialogContent.dark .Label {
     color: #fff;
 }
 
@@ -413,7 +413,7 @@ html {
     outline: none;
 }
 
-.dark .Input {
+.DialogContent.dark .Input {
     background-color: #2f2f2f;
     color: #fff;
     box-shadow: 0 0 0 1px #6f6e77;
@@ -426,7 +426,7 @@ html {
     margin-bottom: 4px;
 }
 
-.dark .Description {
+.DialogContent.dark .Description {
     color: #bcbcbc;
 }
 
@@ -1231,8 +1231,8 @@ html {
   function loadImage(url) {
     return new Promise((resolve, reject) => {
       const img = new Image();
-      img.src = url;
       img.crossOrigin = "anonymous";
+      img.src = url;
       img.onload = () => resolve(img);
       img.onerror = reject;
     });
@@ -1305,6 +1305,9 @@ html {
         return cache2.get(key2);
       }
       const result = fn2(...args);
+      if (result instanceof Promise) {
+        result.catch(() => cache2.delete(key2));
+      }
       cache2.set(key2, result);
       return result;
     };
@@ -1380,6 +1383,7 @@ html {
     if (chatId.startsWith("__share__")) {
       const id = chatId.replace("__share__", "");
       const shareConversation = getConversationFromSharePage();
+      if (!shareConversation) throw new Error("Failed to read conversation data from share page. The page may not have loaded yet or the format has changed.");
       await replaceImageAssets(shareConversation);
       return {
         id,
@@ -1584,11 +1588,15 @@ html {
       if (ModelMapping[modelSlug]) {
         model = ModelMapping[modelSlug];
       } else {
+        let longestMatch = "";
         Object.keys(ModelMapping).forEach((key2) => {
-          if (modelSlug.startsWith(key2)) {
-            model = key2;
+          if (modelSlug.startsWith(key2) && key2.length > longestMatch.length) {
+            longestMatch = key2;
           }
         });
+        if (longestMatch) {
+          model = ModelMapping[longestMatch];
+        }
       }
     }
     return {
@@ -1729,6 +1737,7 @@ html {
       }, 500);
       const observer = new MutationObserver(() => {
         if (!injected) tryInject();
+        else observer.disconnect();
       });
       observer.observe(document.body, { childList: true, subtree: true });
     }
@@ -1941,6 +1950,7 @@ html {
       }, 500);
       const observer = new MutationObserver(() => {
         if (!injected) tryInject();
+        else observer.disconnect();
       });
       observer.observe(document.body, { childList: true, subtree: true });
     }
@@ -2146,6 +2156,7 @@ ${attachmentInfo}`;
       }, 500);
       const observer = new MutationObserver(() => {
         if (!injected) tryInject();
+        else observer.disconnect();
       });
       observer.observe(document.body, { childList: true, subtree: true });
     }
@@ -10432,7 +10443,24 @@ ${attachmentInfo}`;
     return (/* @__PURE__ */ new Date()).toISOString().replace(/:/g, "-").replace(/\..+/, "");
   }
   function getColorScheme() {
-    return document.documentElement.style.getPropertyValue("color-scheme");
+    const html2 = document.documentElement;
+    const body2 = document.body;
+    const inlineScheme = html2.style.getPropertyValue("color-scheme");
+    if (inlineScheme === "dark") return "dark";
+    if (inlineScheme === "light") return "light";
+    if (html2.classList.contains("dark") || html2.classList.contains("dark-theme") || body2.classList.contains("dark") || body2.classList.contains("dark-theme")) {
+      return "dark";
+    }
+    const dataTheme = html2.getAttribute("data-theme") || body2.getAttribute("data-theme");
+    if (dataTheme === "dark") return "dark";
+    if (dataTheme === "light") return "light";
+    const bg = window.getComputedStyle(body2).backgroundColor;
+    const match = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    if (match) {
+      const luminance = 0.299 * +match[1] + 0.587 * +match[2] + 0.114 * +match[3];
+      if (luminance < 80) return "dark";
+    }
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
   function unixTimestampToISOString(timestamp2) {
     if (!timestamp2) return "";
@@ -10450,6 +10478,7 @@ ${attachmentInfo}`;
     document.body.appendChild(a2);
     a2.click();
     document.body.removeChild(a2);
+    setTimeout(() => URL.revokeObjectURL(url), 1e3);
   }
   function downloadUrl(filename, url) {
     const a2 = document.createElement("a");
@@ -21638,9 +21667,10 @@ ${attachmentInfo}`;
           return null;
         }
       }
-      const model2 = ((_e = message == null ? void 0 : message.metadata) == null ? void 0 : _e.model_slug) === "gpt-4" ? "GPT-4" : "GPT-3";
-      const author = transformAuthor$2(message.author, model2);
-      const authorType = message.author.role === "user" ? "user" : model2;
+      const authorSlug = ((_e = message == null ? void 0 : message.metadata) == null ? void 0 : _e.model_slug) ?? "";
+      const authorCssClass = authorSlug.startsWith("gpt-3") ? "GPT-3" : "GPT-4";
+      const author = transformAuthor$2(message.author, model);
+      const authorType = message.author.role === "user" ? "user" : authorCssClass;
       const avatarEl = message.author.role === "user" ? `<img alt="${author}" />` : '<svg width="41" height="41"><use xlink:href="#chatgpt" /></svg>';
       let postSteps = [];
       if (message.author.role === "assistant") {
@@ -21698,7 +21728,7 @@ ${attachmentInfo}`;
     const lang = document.documentElement.lang ?? "en";
     const theme = getColorScheme();
     const _metaList = (metaList == null ? void 0 : metaList.filter((x2) => !!x2.name).map(({ name, value }) => {
-      const val = value.replace("{title}", title2).replace("{date}", date).replace("{timestamp}", timestamp()).replace("{source}", source).replace("{model}", model).replace("{mode_name}", modelSlug).replace("{create_time}", unixTimestampToISOString(createTime)).replace("{update_time}", unixTimestampToISOString(updateTime));
+      const val = value.replace("{title}", title2).replace("{date}", date).replace("{timestamp}", timestamp()).replace("{source}", source).replace("{model}", model).replace("{model_name}", modelSlug).replace("{create_time}", unixTimestampToISOString(createTime)).replace("{update_time}", unixTimestampToISOString(updateTime));
       return [name, val];
     })) ?? [];
     const detailsHtml = _metaList.length > 0 ? `<details>
@@ -22717,7 +22747,7 @@ ${content2.text}
         }
       });
       if (url && url !== "data:,") {
-        dataUrl = url.replace(/^data:image\/[^;]/, "data:application/octet-stream");
+        dataUrl = url.replace(/^data:image\/[^;]+/, "data:application/octet-stream");
       }
     } catch (e2) {
       console.warn("[Exporter] html-to-image failed for AI Studio", e2);
@@ -22737,7 +22767,7 @@ ${content2.text}
             windowHeight: fullHeight,
             ignoreElements: fnIgnoreElements
           });
-          const url = (_a = canvas == null ? void 0 : canvas.toDataURL("image/png", 1)) == null ? void 0 : _a.replace(/^data:image\/[^;]/, "data:application/octet-stream");
+          const url = (_a = canvas == null ? void 0 : canvas.toDataURL("image/png", 1)) == null ? void 0 : _a.replace(/^data:image\/[^;]+/, "data:application/octet-stream");
           if (url && url !== "data:,") return url;
         } catch (e2) {
           console.warn(`[Exporter] html2canvas pass ${pass} failed`, e2);
@@ -22800,7 +22830,7 @@ ${content2.text}
           return true;
         }
       });
-      return dataUrl.replace(/^data:image\/[^;]/, "data:application/octet-stream");
+      return dataUrl.replace(/^data:image\/[^;]+/, "data:application/octet-stream");
     } catch (error2) {
       console.error("[Exporter] html-to-image failed for Gemini", error2);
       return null;
@@ -22972,7 +23002,7 @@ ${content2.text}
         }
         const context = canvas == null ? void 0 : canvas.getContext("2d");
         if (context) context.imageSmoothingEnabled = false;
-        const url = canvas == null ? void 0 : canvas.toDataURL("image/png", 1).replace(/^data:image\/[^;]/, "data:application/octet-stream");
+        const url = canvas == null ? void 0 : canvas.toDataURL("image/png", 1).replace(/^data:image\/[^;]+/, "data:application/octet-stream");
         if (!canvas || !url || url === "data:,") {
           if (currentPass > passLimit) return null;
           return take(width, height, additionalScale / 1.4, currentPass + 1);
@@ -23037,10 +23067,11 @@ ${content2.text}
     return jsonlStringify(messages);
   }
   function convertToOoba(conversation) {
+    var _a;
     const pairs = [];
     const messages = conversation.conversationNodes.filter((node2) => {
-      var _a, _b;
-      return ((_a = node2.message) == null ? void 0 : _a.author.role) !== "tool" && ((_b = node2.message) == null ? void 0 : _b.content.content_type) === "text";
+      var _a2, _b;
+      return ((_a2 = node2.message) == null ? void 0 : _a2.author.role) !== "tool" && ((_b = node2.message) == null ? void 0 : _b.content.content_type) === "text";
     });
     let idx = 0;
     while (idx < messages.length - 1) {
@@ -23075,6 +23106,15 @@ ${content2.text}
       if (role === "assistant") {
         pairs.push(["", text2]);
         idx += 1;
+      }
+    }
+    if (idx < messages.length) {
+      const lastMessage = messages[idx];
+      if (((_a = lastMessage.message) == null ? void 0 : _a.content.content_type) === "text") {
+        const role = lastMessage.message.author.role;
+        const text2 = lastMessage.message.content.parts[0] ?? "";
+        if (role === "user") pairs.push([text2, ""]);
+        else if (role === "assistant") pairs.push(["", text2]);
       }
     }
     const oobaData = {
@@ -23214,7 +23254,7 @@ ${content2.text}
     downloadFile(buildZipFileName("markdown", projectName), "application/zip", blob);
     return true;
   }
-  const LatexRegex$1 = /(\s\$\$.+\$\$\s|\s\$.+\$\s|\\\[.+\\\]|\\\(.+\\\))|(^\$$[\S\s]+^\$$)|(^\$\$[\S\s]+^\$\$$)/gm;
+  const LatexRegex$1 = /(\s\$\$.+?\$\$\s|\s\$.+?\$\s|\\\[.+?\\\]|\\\(.+?\\\))|(^\$$[\S\s]+?^\$$)|(^\$\$[\S\s]+?^\$\$$)/gm;
   function conversationToMarkdown(conversation, metaList) {
     const { id, title: title2, model, modelSlug, createTime, updateTime, conversationNodes } = conversation;
     const source = `${baseUrl}/c/${id}`;
@@ -23325,9 +23365,9 @@ ${content2}`;
       const citeTitle = ((_c = citation.metadata) == null ? void 0 : _c.title) ?? "No title";
       return `[^${citeIndex}]: ${citeTitle}`;
     }).join("\n");
-    return `${output2}
+    return citationText ? `${output2}
 
-${citationText}`;
+${citationText}` : output2;
   }
   function transformContentReferences$1(input, metadata) {
     var _a;
@@ -23409,9 +23449,9 @@ ${content2.text}
         return postProcess(`[Unsupported Content: ${content2.content_type}]`);
     }
   }
-  function copyToClipboard(text2) {
+  async function copyToClipboard(text2) {
     try {
-      navigator.clipboard.writeText(text2);
+      await navigator.clipboard.writeText(text2);
     } catch {
       const textarea = document.createElement("textarea");
       textarea.value = text2;
@@ -23580,6 +23620,22 @@ ${content2}`;
     return () => window.removeEventListener("resize", callback);
   }
   const Divider = () => /* @__PURE__ */ o$8("div", { className: "h-px bg-token-border-light" });
+  function useColorScheme() {
+    const [scheme, setScheme] = h$4(getColorScheme);
+    p$6(() => {
+      const update = () => setScheme(getColorScheme());
+      const observer = new MutationObserver(update);
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme", "style"] });
+      observer.observe(document.body, { attributes: true, attributeFilter: ["class", "data-theme"] });
+      const mq = window.matchMedia("(prefers-color-scheme: dark)");
+      mq.addEventListener("change", update);
+      return () => {
+        observer.disconnect();
+        mq.removeEventListener("change", update);
+      };
+    }, []);
+    return scheme;
+  }
   function EventEmitter(n2) {
     return { all: n2 = n2 || /* @__PURE__ */ new Map(), on: function(t2, e2) {
       var i2 = n2.get(t2);
@@ -23603,6 +23659,7 @@ ${content2}`;
       __publicField(this, "results", []);
       __publicField(this, "status", "IDLE");
       __publicField(this, "backoffMultiplier", 2);
+      __publicField(this, "maxRetries", 3);
       __publicField(this, "backoff");
       __publicField(this, "total", 0);
       __publicField(this, "completed", 0);
@@ -23654,10 +23711,17 @@ ${content2}`;
         this.progress(name, "processing");
         this.backoff = this.minBackoff;
       } catch (error2) {
-        console.error(`Request ${name} failed:`, error2);
-        this.progress(name, "retrying");
-        this.backoff = Math.min(this.backoff * this.backoffMultiplier, this.maxBackoff);
-        this.queue.unshift(requestObject);
+        const retries = (requestObject.retries ?? 0) + 1;
+        console.error(`Request ${name} failed (attempt ${retries}/${this.maxRetries}):`, error2);
+        if (retries < this.maxRetries) {
+          this.progress(name, "retrying");
+          this.backoff = Math.min(this.backoff * this.backoffMultiplier, this.maxBackoff);
+          this.queue.unshift({ ...requestObject, retries });
+        } else {
+          console.error(`Request ${name} exceeded max retries, skipping.`);
+          this.completed++;
+          this.backoff = this.minBackoff;
+        }
       }
       await sleep(this.backoff);
       this.process();
@@ -24089,7 +24153,13 @@ ${content2}`;
       if (!file) return;
       const fileReader = new FileReader();
       fileReader.onload = () => {
-        const data = JSON.parse(fileReader.result);
+        let data;
+        try {
+          data = JSON.parse(fileReader.result);
+        } catch {
+          alert(t2("Invalid File Format"));
+          return;
+        }
         if (!Array.isArray(data)) {
           alert(t2("Invalid File Format"));
           return;
@@ -24267,12 +24337,13 @@ ${content2}`;
           /* @__PURE__ */ o$8("span", { className: "truncate mr-8", children: progress.currentName }),
           /* @__PURE__ */ o$8("span", { children: `${progress.completed}/${progress.total}` })
         ] }),
-        /* @__PURE__ */ o$8("div", { className: "w-full bg-gray-200 rounded-full h-2.5 mb-4 dark:bg-gray-700", children: /* @__PURE__ */ o$8("div", { className: "bg-blue-600 h-2.5 rounded-full", style: { width: `${progress.completed / progress.total * 100}%` } }) })
+        /* @__PURE__ */ o$8("div", { className: "w-full bg-gray-200 rounded-full h-2.5 mb-4 dark:bg-gray-700", children: /* @__PURE__ */ o$8("div", { className: "bg-blue-600 h-2.5 rounded-full", style: { width: `${Math.round(progress.completed / (progress.total || 1) * 100)}%` } }) })
       ] }),
       /* @__PURE__ */ o$8($5d3850c4d0b4e6c7$export$f39c2d165cd861fe, { asChild: true, children: /* @__PURE__ */ o$8("button", { className: "IconButton CloseButton", "aria-label": "Close", children: /* @__PURE__ */ o$8(IconCross, {}) }) })
     ] });
   };
   const ExportDialog = ({ format, open, onOpenChange, children }) => {
+    const isDark = useColorScheme() === "dark";
     return /* @__PURE__ */ o$8(
       $5d3850c4d0b4e6c7$export$be92b6f5f03c0fe9,
       {
@@ -24282,7 +24353,7 @@ ${content2}`;
           /* @__PURE__ */ o$8($5d3850c4d0b4e6c7$export$41fb9f06171c75f4, { asChild: true, children }),
           /* @__PURE__ */ o$8($5d3850c4d0b4e6c7$export$602eac185826482c, { children: [
             /* @__PURE__ */ o$8($5d3850c4d0b4e6c7$export$c6fdb837b070b4ff, { className: "DialogOverlay" }),
-            /* @__PURE__ */ o$8($5d3850c4d0b4e6c7$export$7c6e2c02157bb7d2, { className: "DialogContent", children: open && /* @__PURE__ */ o$8(DialogContent, { format }) })
+            /* @__PURE__ */ o$8($5d3850c4d0b4e6c7$export$7c6e2c02157bb7d2, { className: `DialogContent${isDark ? " dark" : ""}`, children: /* @__PURE__ */ o$8("div", { className: isDark ? "dark" : void 0, children: open && /* @__PURE__ */ o$8(DialogContent, { format }) }) })
           ] })
         ]
       }
@@ -24295,7 +24366,7 @@ ${content2}`;
       const [succeed, setSucceed] = h$4(false);
       const handleClick = typeof onClick === "function" ? async (e2) => {
         e2.preventDefault();
-        if (loading) return;
+        if (loading || disabled) return;
         try {
           setLoading(true);
           const result = await onClick();
@@ -24323,7 +24394,6 @@ ${content2}`;
                 cursor-pointer
                 border border-menu ${className}`,
           onClick: handleClick,
-          onTouchStart: handleClick,
           "aria-disabled": disabled,
           title: title2,
           children: loading ? /* @__PURE__ */ o$8("div", { className: "flex justify-center items-center w-full h-full", children: /* @__PURE__ */ o$8(IconLoading, { className: "w-4 h-4" }) }) : /* @__PURE__ */ o$8(k$3, { children: [
@@ -24733,6 +24803,8 @@ ${content2}`;
       /* eslint-enable pionxzh/consistent-list-newline */
     } = useSettingContext();
     const { t: t2, i18n } = useTranslation();
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === "dark";
     const _title = useTitle();
     const date = dateStr();
     const timestamp$1 = timestamp();
@@ -24752,7 +24824,7 @@ ${content2}`;
           /* @__PURE__ */ o$8($5d3850c4d0b4e6c7$export$41fb9f06171c75f4, { asChild: true, children }),
           /* @__PURE__ */ o$8($5d3850c4d0b4e6c7$export$602eac185826482c, { children: [
             /* @__PURE__ */ o$8($5d3850c4d0b4e6c7$export$c6fdb837b070b4ff, { className: "DialogOverlay" }),
-            /* @__PURE__ */ o$8($5d3850c4d0b4e6c7$export$7c6e2c02157bb7d2, { className: "DialogContent", children: [
+            /* @__PURE__ */ o$8($5d3850c4d0b4e6c7$export$7c6e2c02157bb7d2, { className: `DialogContent${isDark ? " dark" : ""}`, children: /* @__PURE__ */ o$8("div", { className: isDark ? "dark" : void 0, children: [
               /* @__PURE__ */ o$8($5d3850c4d0b4e6c7$export$f99233281efd08a0, { className: "DialogTitle", children: t2("Exporter Settings") }),
               /* @__PURE__ */ o$8("dl", { className: "space-y-6", children: [
                 /* @__PURE__ */ o$8("div", { className: "relative flex bg-white dark:bg-white/5 rounded p-4", children: /* @__PURE__ */ o$8("div", { children: [
@@ -24962,7 +25034,7 @@ ${content2}`;
               ] }),
               /* @__PURE__ */ o$8("div", { className: "flex mt-6", style: { justifyContent: "flex-end" }, children: /* @__PURE__ */ o$8($5d3850c4d0b4e6c7$export$f39c2d165cd861fe, { asChild: true, children: /* @__PURE__ */ o$8("button", { className: "Button green font-bold", children: t2("Save") }) }) }),
               /* @__PURE__ */ o$8($5d3850c4d0b4e6c7$export$f39c2d165cd861fe, { asChild: true, children: /* @__PURE__ */ o$8("button", { className: "IconButton CloseButton", "aria-label": "Close", children: /* @__PURE__ */ o$8(IconCross, {}) }) })
-            ] })
+            ] }) })
           ] })
         ]
       }
@@ -25189,7 +25261,7 @@ ${content2}`;
                           style: {
                             "fill": "var(--ce-menu-primary)",
                             "stroke": "var(--ce-border-light)",
-                            "stoke-width": "2px"
+                            "stroke-width": "2px"
                           }
                         }
                       )
