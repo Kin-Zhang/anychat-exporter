@@ -1647,13 +1647,12 @@ html {
     modelTurnContainer: ".chat-turn-container.model",
     turnContent: ".turn-content",
     textChunk: "ms-text-chunk",
-    rawText: "ms-text-chunk .very-large-text-container",
     cmarkNode: "ms-text-chunk ms-cmark-node",
     promptChunk: ".turn-content > ms-prompt-chunk",
     thoughtChunk: "ms-thought-chunk",
-    navbar: "ms-navbar",
+    navbar: "ms-navbar-v2, ms-navbar",
     bottomActions: ".bottom-actions",
-    pageTitle: "ms-playground-toolbar .page-title h1.mode-title, ms-toolbar .page-title h1.mode-title",
+    pageTitle: "ms-playground-toolbar .page-title, ms-toolbar .page-title",
     toolbarRight: "ms-playground-toolbar .toolbar-right, ms-toolbar .toolbar-right"
   };
   class AIStudioAdapter {
@@ -1662,7 +1661,7 @@ html {
       __publicField(this, "hostnames", ["aistudio.google.com"]);
     }
     checkIfConversationStarted() {
-      return !!this.getPromptIdFromUrl() && document.querySelectorAll(SELECTORS$1.chatTurn).length > 0;
+      return location.pathname.includes("/prompts/") && document.querySelectorAll(SELECTORS$1.chatTurn).length > 0;
     }
     async fetchCurrentConversation() {
       const promptId = this.getPromptIdFromUrl() ?? `aistudio-${Date.now()}`;
@@ -1748,10 +1747,13 @@ html {
       return null;
     }
     extractTitle() {
+      var _a;
       const titleEl = document.querySelector(SELECTORS$1.pageTitle);
-      if (titleEl == null ? void 0 : titleEl.textContent) {
-        const text2 = titleEl.textContent.trim();
-        if (text2 && text2 !== "Playground") return text2;
+      if (titleEl) {
+        if (!titleEl.querySelector("ms-incognito-mode-indicator")) {
+          const text2 = (_a = titleEl.textContent) == null ? void 0 : _a.trim();
+          if (text2 && text2 !== "Playground") return text2;
+        }
       }
       return document.title.replace(/\s*[-|].*$/, "").trim() || "AI Studio Conversation";
     }
@@ -1810,28 +1812,33 @@ html {
       return nodes;
     }
     extractTurnText(turn, type) {
-      var _a, _b;
+      var _a, _b, _c;
       if (type === "user") {
-        const raw2 = turn.querySelector(SELECTORS$1.rawText);
-        if (raw2 == null ? void 0 : raw2.textContent) return raw2.textContent.trim();
+        const userContainer = turn.querySelector('[data-turn-role="User"]');
+        if (userContainer) {
+          const cmark2 = userContainer.querySelector(SELECTORS$1.cmarkNode);
+          if (cmark2 == null ? void 0 : cmark2.textContent) return cmark2.textContent.trim();
+          const tc = userContainer.querySelector(SELECTORS$1.turnContent);
+          if ((_a = tc == null ? void 0 : tc.textContent) == null ? void 0 : _a.trim()) return tc.textContent.trim();
+        }
         const cmark = turn.querySelector(SELECTORS$1.cmarkNode);
         if (cmark == null ? void 0 : cmark.textContent) return cmark.textContent.trim();
         const turnContent2 = turn.querySelector(SELECTORS$1.turnContent);
-        return ((_a = turnContent2 == null ? void 0 : turnContent2.textContent) == null ? void 0 : _a.trim()) ?? "";
+        return ((_b = turnContent2 == null ? void 0 : turnContent2.textContent) == null ? void 0 : _b.trim()) ?? "";
       }
       const chunks = Array.from(turn.querySelectorAll(SELECTORS$1.promptChunk));
-      const texts = chunks.filter((chunk) => !chunk.querySelector(SELECTORS$1.thoughtChunk)).map((chunk) => {
+      const texts = chunks.map((chunk) => {
         var _a2;
-        const raw2 = chunk.querySelector(SELECTORS$1.rawText);
-        if (raw2 == null ? void 0 : raw2.textContent) return raw2.textContent.trim();
-        return ((_a2 = chunk.innerText) == null ? void 0 : _a2.trim()) ?? "";
+        const clone2 = chunk.cloneNode(true);
+        clone2.querySelectorAll(SELECTORS$1.thoughtChunk).forEach((el) => el.remove());
+        return ((_a2 = clone2.innerText) == null ? void 0 : _a2.trim()) ?? "";
       }).filter((t2) => t2);
       if (texts.length > 0) return texts.join("\n\n");
       const turnContent = turn.querySelector(SELECTORS$1.turnContent);
       if (!turnContent) return "";
       const clone = turnContent.cloneNode(true);
       clone.querySelectorAll(SELECTORS$1.thoughtChunk).forEach((el) => el.remove());
-      return ((_b = clone.textContent) == null ? void 0 : _b.trim()) ?? "";
+      return ((_c = clone.textContent) == null ? void 0 : _c.trim()) ?? "";
     }
   }
   class ChatGPTAdapter {

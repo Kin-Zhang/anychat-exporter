@@ -10,13 +10,12 @@ const SELECTORS = {
     modelTurnContainer: '.chat-turn-container.model',
     turnContent: '.turn-content',
     textChunk: 'ms-text-chunk',
-    rawText: 'ms-text-chunk .very-large-text-container',
     cmarkNode: 'ms-text-chunk ms-cmark-node',
     promptChunk: '.turn-content > ms-prompt-chunk',
     thoughtChunk: 'ms-thought-chunk',
-    navbar: 'ms-navbar',
+    navbar: 'ms-navbar-v2, ms-navbar',
     bottomActions: '.bottom-actions',
-    pageTitle: 'ms-playground-toolbar .page-title h1.mode-title, ms-toolbar .page-title h1.mode-title',
+    pageTitle: 'ms-playground-toolbar .page-title, ms-toolbar .page-title',
     toolbarRight: 'ms-playground-toolbar .toolbar-right, ms-toolbar .toolbar-right',
 }
 
@@ -25,7 +24,7 @@ export class AIStudioAdapter implements PlatformAdapter {
     readonly hostnames = ['aistudio.google.com']
 
     checkIfConversationStarted(): boolean {
-        return !!this.getPromptIdFromUrl()
+        return location.pathname.includes('/prompts/')
             && document.querySelectorAll(SELECTORS.chatTurn).length > 0
     }
 
@@ -133,9 +132,12 @@ export class AIStudioAdapter implements PlatformAdapter {
 
     private extractTitle(): string {
         const titleEl = document.querySelector<HTMLElement>(SELECTORS.pageTitle)
-        if (titleEl?.textContent) {
-            const text = titleEl.textContent.trim()
-            if (text && text !== 'Playground') return text
+        if (titleEl) {
+            // Skip the incognito/temporary chat indicator ("Temporary chat" is not a real title)
+            if (!titleEl.querySelector('ms-incognito-mode-indicator')) {
+                const text = titleEl.textContent?.trim()
+                if (text && text !== 'Playground') return text
+            }
         }
         return document.title.replace(/\s*[-|].*$/, '').trim() || 'AI Studio Conversation'
     }
@@ -202,22 +204,29 @@ export class AIStudioAdapter implements PlatformAdapter {
 
     private extractTurnText(turn: Element, type: 'user' | 'model'): string {
         if (type === 'user') {
-            const raw = turn.querySelector(SELECTORS.rawText)
-            if (raw?.textContent) return raw.textContent.trim()
+            // New UI: content lives inside [data-turn-role="User"] container
+            const userContainer = turn.querySelector('[data-turn-role="User"]')
+            if (userContainer) {
+                const cmark = userContainer.querySelector(SELECTORS.cmarkNode)
+                if (cmark?.textContent) return cmark.textContent.trim()
+                const tc = userContainer.querySelector(SELECTORS.turnContent)
+                if (tc?.textContent?.trim()) return tc.textContent.trim()
+            }
+            // Fallback: any ms-cmark-node or .turn-content in the turn element
             const cmark = turn.querySelector(SELECTORS.cmarkNode)
             if (cmark?.textContent) return cmark.textContent.trim()
             const turnContent = turn.querySelector(SELECTORS.turnContent)
             return turnContent?.textContent?.trim() ?? ''
         }
 
-        // Model: collect from prompt chunks, excluding thought chunks
+        // Model: collect from prompt chunks, stripping thought chunk content from each
         const chunks = Array.from(turn.querySelectorAll(SELECTORS.promptChunk))
         const texts = chunks
-            .filter(chunk => !chunk.querySelector(SELECTORS.thoughtChunk))
             .map((chunk) => {
-                const raw = chunk.querySelector(SELECTORS.rawText)
-                if (raw?.textContent) return raw.textContent.trim()
-                return (chunk as HTMLElement).innerText?.trim() ?? ''
+                // Clone and remove thought content so only the response text remains
+                const clone = chunk.cloneNode(true) as Element
+                clone.querySelectorAll(SELECTORS.thoughtChunk).forEach(el => el.remove())
+                return (clone as HTMLElement).innerText?.trim() ?? ''
             })
             .filter(t => t)
 
