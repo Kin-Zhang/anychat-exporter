@@ -31,7 +31,7 @@ export class AIStudioAdapter implements PlatformAdapter {
     async fetchCurrentConversation(): Promise<ConversationResult> {
         const promptId = this.getPromptIdFromUrl() ?? `aistudio-${Date.now()}`
         const title = this.extractTitle()
-        const nodes = this.extractMessagesFromDOM()
+        const nodes = await this.extractMessagesFromDOM()
 
         if (nodes.length === 0) {
             throw new Error('[Exporter] No messages found on AI Studio page. The page may still be loading.')
@@ -142,11 +142,20 @@ export class AIStudioAdapter implements PlatformAdapter {
         return document.title.replace(/\s*[-|].*$/, '').trim() || 'AI Studio Conversation'
     }
 
-    private extractMessagesFromDOM(): ConversationNode[] {
-        const turns = Array.from(document.querySelectorAll(SELECTORS.chatTurn))
+    private async extractMessagesFromDOM(): Promise<ConversationNode[]> {
+        const turns = Array.from(document.querySelectorAll<HTMLElement>(SELECTORS.chatTurn))
         const nodes: ConversationNode[] = []
 
-        turns.forEach((turn, i) => {
+        for (const [i, turn] of turns.entries()) {
+            // AI Studio uses Angular virtual scroll: turns scrolled off-screen have empty
+            // turn-content. Scroll each turn into view so Angular re-renders it before
+            // we try to extract text.
+            const turnContent = turn.querySelector('[data-turn-role] .turn-content')
+            if (!turnContent || !turnContent.textContent?.trim()) {
+                turn.scrollIntoView({ block: 'nearest', behavior: 'instant' })
+                await new Promise<void>(resolve => setTimeout(resolve, 150))
+            }
+
             const userContainer = turn.querySelector(SELECTORS.userTurnContainer)
             const modelContainer = turn.querySelector(SELECTORS.modelTurnContainer)
 
@@ -193,7 +202,7 @@ export class AIStudioAdapter implements PlatformAdapter {
                     })
                 }
             }
-        })
+        }
 
         for (let i = 0; i < nodes.length - 1; i++) {
             nodes[i].children = [nodes[i + 1].id]

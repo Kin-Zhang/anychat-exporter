@@ -1666,7 +1666,7 @@ html {
     async fetchCurrentConversation() {
       const promptId = this.getPromptIdFromUrl() ?? `aistudio-${Date.now()}`;
       const title2 = this.extractTitle();
-      const nodes = this.extractMessagesFromDOM();
+      const nodes = await this.extractMessagesFromDOM();
       if (nodes.length === 0) {
         throw new Error("[Exporter] No messages found on AI Studio page. The page may still be loading.");
       }
@@ -1757,10 +1757,16 @@ html {
       }
       return document.title.replace(/\s*[-|].*$/, "").trim() || "AI Studio Conversation";
     }
-    extractMessagesFromDOM() {
+    async extractMessagesFromDOM() {
+      var _a;
       const turns = Array.from(document.querySelectorAll(SELECTORS$1.chatTurn));
       const nodes = [];
-      turns.forEach((turn, i2) => {
+      for (const [i2, turn] of turns.entries()) {
+        const turnContent = turn.querySelector("[data-turn-role] .turn-content");
+        if (!turnContent || !((_a = turnContent.textContent) == null ? void 0 : _a.trim())) {
+          turn.scrollIntoView({ block: "nearest", behavior: "instant" });
+          await new Promise((resolve) => setTimeout(resolve, 150));
+        }
         const userContainer = turn.querySelector(SELECTORS$1.userTurnContainer);
         const modelContainer = turn.querySelector(SELECTORS$1.modelTurnContainer);
         if (userContainer) {
@@ -1805,7 +1811,7 @@ html {
             });
           }
         }
-      });
+      }
       for (let i2 = 0; i2 < nodes.length - 1; i2++) {
         nodes[i2].children = [nodes[i2 + 1].id];
       }
