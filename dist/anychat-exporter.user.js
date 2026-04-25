@@ -22703,6 +22703,14 @@ ${content2.text}
     return firstTurn.parentElement || firstTurn;
   }
   async function takeAIStudioScreenshot(threadEl, isDarkMode) {
+    const allTurns = Array.from(document.querySelectorAll("ms-chat-turn"));
+    for (const turn of allTurns) {
+      const content2 = turn.querySelector("[data-turn-role] .turn-content");
+      if (!(content2 == null ? void 0 : content2.children.length)) {
+        turn.scrollIntoView({ block: "nearest", behavior: "instant" });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
     const ratio = window.devicePixelRatio || 1;
     const scale = ratio * 2;
     const bg = getComputedStyle(document.body).backgroundColor || (isDarkMode ? "#1b1b1f" : "#ffffff");
@@ -22860,7 +22868,18 @@ ${content2.text}
       return false;
     }
     const effect = new Effect();
-    let thread = document.querySelector('#thread div:has(> [data-testid="conversation-turn-1"])');
+    let thread = null;
+    {
+      const firstTurn = document.querySelector('[data-testid="conversation-turn-1"]');
+      if (firstTurn) {
+        const directParent = firstTurn.parentElement;
+        if (directParent && directParent.querySelectorAll('[data-testid^="conversation-turn-"]').length > 0) {
+          thread = directParent;
+        } else {
+          thread = document.querySelector('#thread div:has(> [data-testid="conversation-turn-1"])');
+        }
+      }
+    }
     let isClaude = false;
     let isGemini = false;
     let isAIStudio = false;
@@ -22947,11 +22966,27 @@ ${content2.text}
                 }
             `;
       } else {
+        const chatBg = isDarkMode ? "#212121" : "#fff";
+        const chatFg = isDarkMode ? "#ececec" : "#0d0d0d";
         style.textContent = `
                 #thread div:has(> [data-testid="conversation-turn-1"]),
                 #thread [data-testid^="conversation-turn-"] {
-                    color: ${isDarkMode ? "#ececec" : "#0d0d0d"};
-                    background-color: ${isDarkMode ? "#212121" : "#fff"};
+                    color: ${chatFg};
+                    background-color: ${chatBg};
+                }
+
+                /* Remove horizontal padding from the container and turns to eliminate
+                   empty side margins in the captured image */
+                #thread div:has(> [data-testid="conversation-turn-1"]) {
+                    padding-left: 0 !important;
+                    padding-right: 0 !important;
+                }
+                #thread [data-testid^="conversation-turn-"] > * {
+                    max-width: 100% !important;
+                    margin-left: 0 !important;
+                    margin-right: 0 !important;
+                    padding-left: 16px !important;
+                    padding-right: 16px !important;
                 }
 
                 /* https://github.com/niklasvh/html2canvas/issues/2775#issuecomment-1204988157 */
@@ -23029,7 +23064,25 @@ ${content2.text}
     } else if (isGemini) {
       dataUrl = await takeGeminiScreenshot(threadEl, isDarkMode);
     } else {
+      const savedWidth = threadEl.style.width;
+      const savedMaxWidth = threadEl.style.maxWidth;
+      const savedMargin = threadEl.style.margin;
+      const firstInner = threadEl.querySelector(
+        '[data-testid^="conversation-turn-"] > *'
+      );
+      if (firstInner) {
+        const contentWidth = firstInner.scrollWidth;
+        if (contentWidth > 400 && contentWidth < threadEl.scrollWidth) {
+          threadEl.style.width = `${contentWidth}px`;
+          threadEl.style.maxWidth = `${contentWidth}px`;
+          threadEl.style.margin = "0";
+          await new Promise((r2) => requestAnimationFrame(r2));
+        }
+      }
       dataUrl = await takeHtml2canvasScreenshot(threadEl);
+      threadEl.style.width = savedWidth;
+      threadEl.style.maxWidth = savedMaxWidth;
+      threadEl.style.margin = savedMargin;
     }
     effect.dispose();
     if (!dataUrl) {

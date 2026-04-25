@@ -85,6 +85,17 @@ function findAIStudioThread(): HTMLElement | null {
  * Uses html-to-image (better Angular rendering), then falls back to html2canvas.
  */
 async function takeAIStudioScreenshot(threadEl: HTMLElement, isDarkMode: boolean): Promise<string | null> {
+    // Pre-render: Angular virtual scroll empties off-screen turns. Scroll each
+    // virtualized turn into view so it renders before we capture the DOM.
+    const allTurns = Array.from(document.querySelectorAll<HTMLElement>('ms-chat-turn'))
+    for (const turn of allTurns) {
+        const content = turn.querySelector('[data-turn-role] .turn-content')
+        if (!content?.children.length) {
+            turn.scrollIntoView({ block: 'nearest', behavior: 'instant' })
+            await new Promise<void>(resolve => setTimeout(resolve, 100))
+        }
+    }
+
     const ratio = window.devicePixelRatio || 1
     const scale = ratio * 2
     const bg = getComputedStyle(document.body).backgroundColor || (isDarkMode ? '#1b1b1f' : '#ffffff')
@@ -282,7 +293,24 @@ export async function exportToPng(fileNameFormat: string) {
 
     const effect = new Effect()
 
-    let thread = document.querySelector('#thread div:has(> [data-testid="conversation-turn-1"])')
+    // ChatGPT: the element that directly parents all turns is wide (full viewport),
+    // so we look one level deeper — the turns' own parent element — which is the
+    // narrower content column. Fall back to the wider container if needed.
+    let thread: Element | null = null
+    {
+        const firstTurn = document.querySelector<HTMLElement>('[data-testid="conversation-turn-1"]')
+        if (firstTurn) {
+            // Prefer the first turn's direct parent (narrower content column).
+            // Only use it if it actually contains multiple turns (not a single-turn wrapper).
+            const directParent = firstTurn.parentElement
+            if (directParent && directParent.querySelectorAll('[data-testid^="conversation-turn-"]').length > 0) {
+                thread = directParent
+            }
+            else {
+                thread = document.querySelector('#thread div:has(> [data-testid="conversation-turn-1"])')
+            }
+        }
+    }
     let isClaude = false
     let isGemini = false
     let isAIStudio = false
@@ -385,11 +413,29 @@ export async function exportToPng(fileNameFormat: string) {
             `
         }
         else {
+            // ChatGPT: remove horizontal padding/centering from the thread container
+            // so the captured image has no empty side margins.
+            const chatBg = isDarkMode ? '#212121' : '#fff'
+            const chatFg = isDarkMode ? '#ececec' : '#0d0d0d'
             style.textContent = `
                 #thread div:has(> [data-testid="conversation-turn-1"]),
                 #thread [data-testid^="conversation-turn-"] {
-                    color: ${isDarkMode ? '#ececec' : '#0d0d0d'};
-                    background-color: ${isDarkMode ? '#212121' : '#fff'};
+                    color: ${chatFg};
+                    background-color: ${chatBg};
+                }
+
+                /* Remove horizontal padding from the container and turns to eliminate
+                   empty side margins in the captured image */
+                #thread div:has(> [data-testid="conversation-turn-1"]) {
+                    padding-left: 0 !important;
+                    padding-right: 0 !important;
+                }
+                #thread [data-testid^="conversation-turn-"] > * {
+                    max-width: 100% !important;
+                    margin-left: 0 !important;
+                    margin-right: 0 !important;
+                    padding-left: 16px !important;
+                    padding-right: 16px !important;
                 }
 
                 /* https://github.com/niklasvh/html2canvas/issues/2775#issuecomment-1204988157 */
@@ -483,7 +529,28 @@ export async function exportToPng(fileNameFormat: string) {
         dataUrl = await takeGeminiScreenshot(threadEl, isDarkMode)
     }
     else {
+        // For ChatGPT (and fallback): constrain the container to the actual content
+        // width (measured from the first turn's inner element) so the screenshot
+        // doesn't include empty side margins left by the centering layout.
+        const savedWidth = threadEl.style.width
+        const savedMaxWidth = threadEl.style.maxWidth
+        const savedMargin = threadEl.style.margin
+        const firstInner = threadEl.querySelector<HTMLElement>(
+            '[data-testid^="conversation-turn-"] > *',
+        )
+        if (firstInner) {
+            const contentWidth = firstInner.scrollWidth
+            if (contentWidth > 400 && contentWidth < threadEl.scrollWidth) {
+                threadEl.style.width = `${contentWidth}px`
+                threadEl.style.maxWidth = `${contentWidth}px`
+                threadEl.style.margin = '0'
+                await new Promise(r => requestAnimationFrame(r))
+            }
+        }
         dataUrl = await takeHtml2canvasScreenshot(threadEl)
+        threadEl.style.width = savedWidth
+        threadEl.style.maxWidth = savedMaxWidth
+        threadEl.style.margin = savedMargin
     }
 
     effect.dispose()
