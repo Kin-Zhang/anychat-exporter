@@ -484,6 +484,14 @@ export async function exportToPng(fileNameFormat: string) {
                 #thread pre button {
                     visibility: hidden;
                 }
+
+                /* Sticky elements render at wrong positions relative to the cloned document
+                   root — convert to relative so they appear in their natural document flow */
+                #thread .sticky {
+                    position: relative !important;
+                    top: auto !important;
+                    bottom: auto !important;
+                }
             `
         }
 
@@ -501,9 +509,15 @@ export async function exportToPng(fileNameFormat: string) {
 
     const takeHtml2canvasScreenshot = async (el: HTMLElement): Promise<string | null> => {
         const passLimit = 10
+        // Most browsers cap canvas at 16 384 px per dimension; exceeding it silently
+        // truncates the output, which causes blank areas rather than thrown errors.
+        const MAX_CANVAS_DIM = 16384
         const take = async (width: number, height: number, additionalScale = 1, currentPass = 1): Promise<string | null> => {
             const ratio = window.devicePixelRatio || 1
-            const scale = ratio * 2 * additionalScale
+            // Pre-limit scale so the canvas never exceeds browser dimension limits
+            let scale = ratio * 2 * additionalScale
+            if (height * scale > MAX_CANVAS_DIM) scale = Math.min(scale, MAX_CANVAS_DIM / height)
+            if (width * scale > MAX_CANVAS_DIM) scale = Math.min(scale, MAX_CANVAS_DIM / width)
 
             let canvas: HTMLCanvasElement | null = null
             try {
@@ -544,13 +558,13 @@ export async function exportToPng(fileNameFormat: string) {
         dataUrl = await takeGeminiScreenshot(threadEl, isDarkMode)
     }
     else {
-        // For ChatGPT (and the generic fallback): constrain the container width
-        // to the actual content column so the screenshot has no empty side margins.
+        // For ChatGPT: constrain the container width to the actual content column
+        // so the screenshot has no empty side margins, then capture.
         //
-        // ChatGPT uses a centered layout — the outer turn wrapper is full-width but
-        // the visible content is inside a `mx-auto max-w-3xl` (768px) inner div.
-        // We find an inner element with a real `max-width` and use that value
-        // (plus a bit of horizontal padding) as the screenshot width.
+        // Primary renderer: html-to-image (clone-based, avoids html2canvas's
+        // silent canvas-height truncation which causes blank strips in the middle
+        // of long conversations).
+        // Fallback: html2canvas.
         const savedWidth = threadEl.style.width
         const savedMaxWidth = threadEl.style.maxWidth
         const savedMargin = threadEl.style.margin
@@ -565,7 +579,6 @@ export async function exportToPng(fileNameFormat: string) {
                 targetWidth = Math.max(targetWidth, mw + 32)
             }
         }
-        // Fallback: ChatGPT's typical content width
         if (targetWidth === 0) targetWidth = 800
         if (targetWidth < threadEl.scrollWidth) {
             threadEl.style.width = `${targetWidth}px`
@@ -573,7 +586,48 @@ export async function exportToPng(fileNameFormat: string) {
             threadEl.style.margin = '0'
             await new Promise(r => requestAnimationFrame(r))
         }
-        dataUrl = await takeHtml2canvasScreenshot(threadEl)
+
+        // ChatGPT scrolls inside #thread, not the window. Reset it to the top so
+        // coordinates are relative to the conversation start, not the current scroll.
+        const threadScrollEl = document.getElementById('thread')
+        const savedScrollTop = threadScrollEl?.scrollTop ?? 0
+        if (threadScrollEl) threadScrollEl.scrollTop = 0
+        await new Promise(r => requestAnimationFrame(r))
+
+        const ratio = window.devicePixelRatio || 1
+        const chatBg = isDarkMode ? '#212121' : '#fff'
+
+        // Primary: html-to-image renders via SVG clone — no per-tile canvas size limit,
+        // and sticky elements are rendered at their natural document flow position.
+        try {
+            const url = await htmlToImage.toPng(threadEl, {
+                pixelRatio: ratio * 2,
+                backgroundColor: chatBg,
+                width: threadEl.scrollWidth,
+                height: threadEl.scrollHeight,
+                skipFonts: true,
+                filter: (node: Node) => {
+                    if (!(node instanceof Element)) return true
+                    const nodeEl = node as HTMLElement
+                    if (nodeEl.id === 'thread-bottom-container' || nodeEl.id === 'page-header') return false
+                    return true
+                },
+            })
+            if (url && url !== 'data:,') {
+                dataUrl = url.replace(/^data:image\/[^;]+/, 'data:application/octet-stream')
+            }
+        }
+        catch (e) {
+            console.warn('[Exporter] html-to-image failed for ChatGPT, trying html2canvas', e)
+        }
+
+        // Fallback: html2canvas (scale is pre-limited inside takeHtml2canvasScreenshot)
+        if (!dataUrl) {
+            dataUrl = await takeHtml2canvasScreenshot(threadEl)
+        }
+
+        // Restore scroll and element styles
+        if (threadScrollEl) threadScrollEl.scrollTop = savedScrollTop
         threadEl.style.width = savedWidth
         threadEl.style.maxWidth = savedMaxWidth
         threadEl.style.margin = savedMargin

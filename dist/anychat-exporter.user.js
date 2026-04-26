@@ -23028,6 +23028,14 @@ ${content2.text}
                 #thread pre button {
                     visibility: hidden;
                 }
+
+                /* Sticky elements render at wrong positions relative to the cloned document
+                   root — convert to relative so they appear in their natural document flow */
+                #thread .sticky {
+                    position: relative !important;
+                    top: auto !important;
+                    bottom: auto !important;
+                }
             `;
       }
       thread.appendChild(style);
@@ -23039,9 +23047,12 @@ ${content2.text}
     let dataUrl = null;
     const takeHtml2canvasScreenshot = async (el) => {
       const passLimit = 10;
+      const MAX_CANVAS_DIM = 16384;
       const take = async (width, height, additionalScale = 1, currentPass = 1) => {
         const ratio = window.devicePixelRatio || 1;
-        const scale = ratio * 2 * additionalScale;
+        let scale = ratio * 2 * additionalScale;
+        if (height * scale > MAX_CANVAS_DIM) scale = Math.min(scale, MAX_CANVAS_DIM / height);
+        if (width * scale > MAX_CANVAS_DIM) scale = Math.min(scale, MAX_CANVAS_DIM / width);
         let canvas = null;
         try {
           canvas = await html2canvas(el, {
@@ -23093,7 +23104,36 @@ ${content2.text}
         threadEl.style.margin = "0";
         await new Promise((r2) => requestAnimationFrame(r2));
       }
-      dataUrl = await takeHtml2canvasScreenshot(threadEl);
+      const threadScrollEl = document.getElementById("thread");
+      const savedScrollTop = (threadScrollEl == null ? void 0 : threadScrollEl.scrollTop) ?? 0;
+      if (threadScrollEl) threadScrollEl.scrollTop = 0;
+      await new Promise((r2) => requestAnimationFrame(r2));
+      const ratio = window.devicePixelRatio || 1;
+      const chatBg = isDarkMode ? "#212121" : "#fff";
+      try {
+        const url = await toPng(threadEl, {
+          pixelRatio: ratio * 2,
+          backgroundColor: chatBg,
+          width: threadEl.scrollWidth,
+          height: threadEl.scrollHeight,
+          skipFonts: true,
+          filter: (node2) => {
+            if (!(node2 instanceof Element)) return true;
+            const nodeEl = node2;
+            if (nodeEl.id === "thread-bottom-container" || nodeEl.id === "page-header") return false;
+            return true;
+          }
+        });
+        if (url && url !== "data:,") {
+          dataUrl = url.replace(/^data:image\/[^;]+/, "data:application/octet-stream");
+        }
+      } catch (e2) {
+        console.warn("[Exporter] html-to-image failed for ChatGPT, trying html2canvas", e2);
+      }
+      if (!dataUrl) {
+        dataUrl = await takeHtml2canvasScreenshot(threadEl);
+      }
+      if (threadScrollEl) threadScrollEl.scrollTop = savedScrollTop;
       threadEl.style.width = savedWidth;
       threadEl.style.maxWidth = savedMaxWidth;
       threadEl.style.margin = savedMargin;
