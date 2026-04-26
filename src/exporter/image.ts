@@ -17,6 +17,76 @@ function fnIgnoreElements(el: any) {
 }
 
 /**
+ * Convert every <img> inside `root` to an inline data URL so it survives
+ * the screenshot pipeline. Without this, html-to-image's internal `fetch`
+ * is blocked by CORS for cross-origin images (e.g. ChatGPT serves uploads
+ * from files.oaiusercontent.com), and html2canvas's `useCORS` only works
+ * if the original element was loaded with crossorigin="anonymous".
+ *
+ * Returns a teardown function that restores all original src values.
+ */
+async function inlineImagesInElement(root: HTMLElement): Promise<() => void> {
+    const restoreFns: Array<() => void> = []
+    const imgs = Array.from(root.querySelectorAll<HTMLImageElement>('img'))
+
+    const tryDraw = (el: HTMLImageElement): string | null => {
+        try {
+            if (!el.complete || el.naturalWidth === 0) return null
+            const canvas = document.createElement('canvas')
+            canvas.width = el.naturalWidth
+            canvas.height = el.naturalHeight
+            const ctx = canvas.getContext('2d')
+            if (!ctx) return null
+            ctx.drawImage(el, 0, 0)
+            return canvas.toDataURL('image/png')
+        }
+        catch {
+            // tainted canvas — needs a fresh load with crossOrigin="anonymous"
+            return null
+        }
+    }
+
+    await Promise.all(imgs.map(async (img) => {
+        const originalSrc = img.src
+        const originalSrcset = img.srcset
+        if (!originalSrc || originalSrc.startsWith('data:') || originalSrc.startsWith('blob:')) return
+
+        // Try the already-loaded element first
+        let dataUrl = tryDraw(img)
+
+        // Fallback: re-fetch with crossOrigin so the canvas isn't tainted
+        if (!dataUrl) {
+            dataUrl = await new Promise<string | null>((resolve) => {
+                const fresh = new Image()
+                fresh.crossOrigin = 'anonymous'
+                const timer = setTimeout(() => resolve(null), 8000)
+                fresh.onload = () => {
+                    clearTimeout(timer)
+                    resolve(tryDraw(fresh))
+                }
+                fresh.onerror = () => {
+                    clearTimeout(timer)
+                    resolve(null)
+                }
+                fresh.src = originalSrc
+            })
+        }
+
+        if (dataUrl) {
+            // srcset would override src — clear it so our data URL wins
+            if (originalSrcset) img.srcset = ''
+            img.src = dataUrl
+            restoreFns.push(() => {
+                img.src = originalSrc
+                if (originalSrcset) img.srcset = originalSrcset
+            })
+        }
+    }))
+
+    return () => restoreFns.forEach(fn => fn())
+}
+
+/**
  * Find the tightest container that wraps all Gemini conversation turns,
  * without climbing so high that we accidentally include the sidebar.
  *
@@ -505,6 +575,11 @@ export async function exportToPng(fileNameFormat: string) {
 
     await sleep(100)
 
+    // Convert cross-origin <img>s to data URLs so they appear in the screenshot.
+    // Without this, html-to-image cannot fetch them due to CORS, and html2canvas
+    // can only handle them when the original element was crossorigin="anonymous".
+    const restoreImages = await inlineImagesInElement(threadEl)
+
     let dataUrl: string | null = null
 
     const takeHtml2canvasScreenshot = async (el: HTMLElement): Promise<string | null> => {
@@ -556,6 +631,10 @@ export async function exportToPng(fileNameFormat: string) {
     }
     else if (isGemini) {
         dataUrl = await takeGeminiScreenshot(threadEl, isDarkMode)
+    }
+    else if (isClaude) {
+        // Claude was working with html2canvas + useCORS — keep it simple here
+        dataUrl = await takeHtml2canvasScreenshot(threadEl)
     }
     else {
         // For ChatGPT: constrain the container width to the actual content column
@@ -633,6 +712,7 @@ export async function exportToPng(fileNameFormat: string) {
         threadEl.style.margin = savedMargin
     }
 
+    restoreImages()
     effect.dispose()
 
     if (!dataUrl) {

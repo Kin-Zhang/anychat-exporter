@@ -22676,6 +22676,55 @@ ${content2.text}
     if (GEMINI_CAPTURE_TAGS.has(String(el.tagName).toLowerCase())) return false;
     return typeof el.shadowRoot === "object" && el.shadowRoot !== null;
   }
+  async function inlineImagesInElement(root2) {
+    const restoreFns = [];
+    const imgs = Array.from(root2.querySelectorAll("img"));
+    const tryDraw = (el) => {
+      try {
+        if (!el.complete || el.naturalWidth === 0) return null;
+        const canvas = document.createElement("canvas");
+        canvas.width = el.naturalWidth;
+        canvas.height = el.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return null;
+        ctx.drawImage(el, 0, 0);
+        return canvas.toDataURL("image/png");
+      } catch {
+        return null;
+      }
+    };
+    await Promise.all(imgs.map(async (img) => {
+      const originalSrc = img.src;
+      const originalSrcset = img.srcset;
+      if (!originalSrc || originalSrc.startsWith("data:") || originalSrc.startsWith("blob:")) return;
+      let dataUrl = tryDraw(img);
+      if (!dataUrl) {
+        dataUrl = await new Promise((resolve) => {
+          const fresh = new Image();
+          fresh.crossOrigin = "anonymous";
+          const timer = setTimeout(() => resolve(null), 8e3);
+          fresh.onload = () => {
+            clearTimeout(timer);
+            resolve(tryDraw(fresh));
+          };
+          fresh.onerror = () => {
+            clearTimeout(timer);
+            resolve(null);
+          };
+          fresh.src = originalSrc;
+        });
+      }
+      if (dataUrl) {
+        if (originalSrcset) img.srcset = "";
+        img.src = dataUrl;
+        restoreFns.push(() => {
+          img.src = originalSrc;
+          if (originalSrcset) img.srcset = originalSrcset;
+        });
+      }
+    }));
+    return () => restoreFns.forEach((fn2) => fn2());
+  }
   function findGeminiThread() {
     const allScrollers = Array.from(document.querySelectorAll("infinite-scroller"));
     const chatScroller = allScrollers.find((el) => el.querySelector(".conversation-container, user-query, model-response") !== null);
@@ -23044,6 +23093,7 @@ ${content2.text}
     const threadEl = thread;
     effect.run();
     await sleep(100);
+    const restoreImages = await inlineImagesInElement(threadEl);
     let dataUrl = null;
     const takeHtml2canvasScreenshot = async (el) => {
       const passLimit = 10;
@@ -23082,6 +23132,8 @@ ${content2.text}
       dataUrl = await takeAIStudioScreenshot(threadEl, isDarkMode);
     } else if (isGemini) {
       dataUrl = await takeGeminiScreenshot(threadEl, isDarkMode);
+    } else if (isClaude) {
+      dataUrl = await takeHtml2canvasScreenshot(threadEl);
     } else {
       const savedWidth = threadEl.style.width;
       const savedMaxWidth = threadEl.style.maxWidth;
@@ -23138,6 +23190,7 @@ ${content2.text}
       threadEl.style.maxWidth = savedMaxWidth;
       threadEl.style.margin = savedMargin;
     }
+    restoreImages();
     effect.dispose();
     if (!dataUrl) {
       alert("Failed to export to PNG. This might be caused by the size of the conversation. Please try to export a smaller conversation.");
