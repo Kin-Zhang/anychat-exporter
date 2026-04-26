@@ -85,17 +85,6 @@ function findAIStudioThread(): HTMLElement | null {
  * Uses html-to-image (better Angular rendering), then falls back to html2canvas.
  */
 async function takeAIStudioScreenshot(threadEl: HTMLElement, isDarkMode: boolean): Promise<string | null> {
-    // Pre-render: Angular virtual scroll empties off-screen turns. Scroll each
-    // virtualized turn into view so it renders before we capture the DOM.
-    const allTurns = Array.from(document.querySelectorAll<HTMLElement>('ms-chat-turn'))
-    for (const turn of allTurns) {
-        const content = turn.querySelector('[data-turn-role] .turn-content')
-        if (!content?.children.length) {
-            turn.scrollIntoView({ block: 'nearest', behavior: 'instant' })
-            await new Promise<void>(resolve => setTimeout(resolve, 100))
-        }
-    }
-
     const ratio = window.devicePixelRatio || 1
     const scale = ratio * 2
     const bg = getComputedStyle(document.body).backgroundColor || (isDarkMode ? '#1b1b1f' : '#ffffff')
@@ -140,7 +129,33 @@ async function takeAIStudioScreenshot(threadEl: HTMLElement, isDarkMode: boolean
         anc = anc.parentElement
     }
 
+    // The layout has changed dramatically — give Angular CDK Virtual Scroll time
+    // to detect the new "viewport" (now unbounded) and render all items.
+    // A single rAF is not enough; CDK's checkViewportSize is debounced.
     await new Promise(r => requestAnimationFrame(r))
+    await new Promise(r => requestAnimationFrame(r))
+    // Trigger a resize event to nudge any size-dependent observers
+    window.dispatchEvent(new Event('resize'))
+    await new Promise(r => setTimeout(r, 300))
+
+    // Verify every turn has rendered content. For any that are still virtualised
+    // (empty .turn-content), scroll them into view and wait. Repeat up to 5
+    // passes — each pass renders more items and reduces the empty set.
+    for (let pass = 0; pass < 5; pass++) {
+        const allTurns = Array.from(document.querySelectorAll<HTMLElement>('ms-chat-turn'))
+        const empty = allTurns.filter((turn) => {
+            const content = turn.querySelector('[data-turn-role] .turn-content')
+            return !content?.children.length
+        })
+        if (empty.length === 0) break
+
+        for (const turn of empty) {
+            turn.scrollIntoView({ block: 'center', behavior: 'instant' })
+            await new Promise(r => setTimeout(r, 120))
+        }
+    }
+    // Final settle so all rendering completes before capture
+    await new Promise(r => setTimeout(r, 200))
 
     const fullWidth = threadEl.scrollWidth
     const fullHeight = threadEl.scrollHeight
@@ -529,23 +544,34 @@ export async function exportToPng(fileNameFormat: string) {
         dataUrl = await takeGeminiScreenshot(threadEl, isDarkMode)
     }
     else {
-        // For ChatGPT (and fallback): constrain the container to the actual content
-        // width (measured from the first turn's inner element) so the screenshot
-        // doesn't include empty side margins left by the centering layout.
+        // For ChatGPT (and the generic fallback): constrain the container width
+        // to the actual content column so the screenshot has no empty side margins.
+        //
+        // ChatGPT uses a centered layout — the outer turn wrapper is full-width but
+        // the visible content is inside a `mx-auto max-w-3xl` (768px) inner div.
+        // We find an inner element with a real `max-width` and use that value
+        // (plus a bit of horizontal padding) as the screenshot width.
         const savedWidth = threadEl.style.width
         const savedMaxWidth = threadEl.style.maxWidth
         const savedMargin = threadEl.style.margin
-        const firstInner = threadEl.querySelector<HTMLElement>(
-            '[data-testid^="conversation-turn-"] > *',
-        )
-        if (firstInner) {
-            const contentWidth = firstInner.scrollWidth
-            if (contentWidth > 400 && contentWidth < threadEl.scrollWidth) {
-                threadEl.style.width = `${contentWidth}px`
-                threadEl.style.maxWidth = `${contentWidth}px`
-                threadEl.style.margin = '0'
-                await new Promise(r => requestAnimationFrame(r))
+        let targetWidth = 0
+        const innerCandidates = Array.from(threadEl.querySelectorAll<HTMLElement>(
+            '[data-testid^="conversation-turn-"] [class*="max-w"]',
+        ))
+        for (const cand of innerCandidates) {
+            const cs = getComputedStyle(cand)
+            const mw = Number.parseFloat(cs.maxWidth)
+            if (!Number.isNaN(mw) && mw > 400 && mw < 1500) {
+                targetWidth = Math.max(targetWidth, mw + 32)
             }
+        }
+        // Fallback: ChatGPT's typical content width
+        if (targetWidth === 0) targetWidth = 800
+        if (targetWidth < threadEl.scrollWidth) {
+            threadEl.style.width = `${targetWidth}px`
+            threadEl.style.maxWidth = `${targetWidth}px`
+            threadEl.style.margin = '0'
+            await new Promise(r => requestAnimationFrame(r))
         }
         dataUrl = await takeHtml2canvasScreenshot(threadEl)
         threadEl.style.width = savedWidth

@@ -22703,14 +22703,6 @@ ${content2.text}
     return firstTurn.parentElement || firstTurn;
   }
   async function takeAIStudioScreenshot(threadEl, isDarkMode) {
-    const allTurns = Array.from(document.querySelectorAll("ms-chat-turn"));
-    for (const turn of allTurns) {
-      const content2 = turn.querySelector("[data-turn-role] .turn-content");
-      if (!(content2 == null ? void 0 : content2.children.length)) {
-        turn.scrollIntoView({ block: "nearest", behavior: "instant" });
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-    }
     const ratio = window.devicePixelRatio || 1;
     const scale = ratio * 2;
     const bg = getComputedStyle(document.body).backgroundColor || (isDarkMode ? "#1b1b1f" : "#ffffff");
@@ -22748,6 +22740,22 @@ ${content2.text}
       anc = anc.parentElement;
     }
     await new Promise((r2) => requestAnimationFrame(r2));
+    await new Promise((r2) => requestAnimationFrame(r2));
+    window.dispatchEvent(new Event("resize"));
+    await new Promise((r2) => setTimeout(r2, 300));
+    for (let pass = 0; pass < 5; pass++) {
+      const allTurns = Array.from(document.querySelectorAll("ms-chat-turn"));
+      const empty = allTurns.filter((turn) => {
+        const content2 = turn.querySelector("[data-turn-role] .turn-content");
+        return !(content2 == null ? void 0 : content2.children.length);
+      });
+      if (empty.length === 0) break;
+      for (const turn of empty) {
+        turn.scrollIntoView({ block: "center", behavior: "instant" });
+        await new Promise((r2) => setTimeout(r2, 120));
+      }
+    }
+    await new Promise((r2) => setTimeout(r2, 200));
     const fullWidth = threadEl.scrollWidth;
     const fullHeight = threadEl.scrollHeight;
     let dataUrl = null;
@@ -23067,17 +23075,23 @@ ${content2.text}
       const savedWidth = threadEl.style.width;
       const savedMaxWidth = threadEl.style.maxWidth;
       const savedMargin = threadEl.style.margin;
-      const firstInner = threadEl.querySelector(
-        '[data-testid^="conversation-turn-"] > *'
-      );
-      if (firstInner) {
-        const contentWidth = firstInner.scrollWidth;
-        if (contentWidth > 400 && contentWidth < threadEl.scrollWidth) {
-          threadEl.style.width = `${contentWidth}px`;
-          threadEl.style.maxWidth = `${contentWidth}px`;
-          threadEl.style.margin = "0";
-          await new Promise((r2) => requestAnimationFrame(r2));
+      let targetWidth = 0;
+      const innerCandidates = Array.from(threadEl.querySelectorAll(
+        '[data-testid^="conversation-turn-"] [class*="max-w"]'
+      ));
+      for (const cand of innerCandidates) {
+        const cs = getComputedStyle(cand);
+        const mw = Number.parseFloat(cs.maxWidth);
+        if (!Number.isNaN(mw) && mw > 400 && mw < 1500) {
+          targetWidth = Math.max(targetWidth, mw + 32);
         }
+      }
+      if (targetWidth === 0) targetWidth = 800;
+      if (targetWidth < threadEl.scrollWidth) {
+        threadEl.style.width = `${targetWidth}px`;
+        threadEl.style.maxWidth = `${targetWidth}px`;
+        threadEl.style.margin = "0";
+        await new Promise((r2) => requestAnimationFrame(r2));
       }
       dataUrl = await takeHtml2canvasScreenshot(threadEl);
       threadEl.style.width = savedWidth;
