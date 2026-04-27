@@ -17,6 +17,76 @@ function fnIgnoreElements(el: any) {
 }
 
 /**
+ * Convert every <img> inside `root` to an inline data URL so it survives
+ * the screenshot pipeline. Without this, html-to-image's internal `fetch`
+ * is blocked by CORS for cross-origin images (e.g. ChatGPT serves uploads
+ * from files.oaiusercontent.com), and html2canvas's `useCORS` only works
+ * if the original element was loaded with crossorigin="anonymous".
+ *
+ * Returns a teardown function that restores all original src values.
+ */
+async function inlineImagesInElement(root: HTMLElement): Promise<() => void> {
+    const restoreFns: Array<() => void> = []
+    const imgs = Array.from(root.querySelectorAll<HTMLImageElement>('img'))
+
+    const tryDraw = (el: HTMLImageElement): string | null => {
+        try {
+            if (!el.complete || el.naturalWidth === 0) return null
+            const canvas = document.createElement('canvas')
+            canvas.width = el.naturalWidth
+            canvas.height = el.naturalHeight
+            const ctx = canvas.getContext('2d')
+            if (!ctx) return null
+            ctx.drawImage(el, 0, 0)
+            return canvas.toDataURL('image/png')
+        }
+        catch {
+            // tainted canvas — needs a fresh load with crossOrigin="anonymous"
+            return null
+        }
+    }
+
+    await Promise.all(imgs.map(async (img) => {
+        const originalSrc = img.src
+        const originalSrcset = img.srcset
+        if (!originalSrc || originalSrc.startsWith('data:') || originalSrc.startsWith('blob:')) return
+
+        // Try the already-loaded element first
+        let dataUrl = tryDraw(img)
+
+        // Fallback: re-fetch with crossOrigin so the canvas isn't tainted
+        if (!dataUrl) {
+            dataUrl = await new Promise<string | null>((resolve) => {
+                const fresh = new Image()
+                fresh.crossOrigin = 'anonymous'
+                const timer = setTimeout(() => resolve(null), 8000)
+                fresh.onload = () => {
+                    clearTimeout(timer)
+                    resolve(tryDraw(fresh))
+                }
+                fresh.onerror = () => {
+                    clearTimeout(timer)
+                    resolve(null)
+                }
+                fresh.src = originalSrc
+            })
+        }
+
+        if (dataUrl) {
+            // srcset would override src — clear it so our data URL wins
+            if (originalSrcset) img.srcset = ''
+            img.src = dataUrl
+            restoreFns.push(() => {
+                img.src = originalSrc
+                if (originalSrcset) img.srcset = originalSrcset
+            })
+        }
+    }))
+
+    return () => restoreFns.forEach(fn => fn())
+}
+
+/**
  * Find the tightest container that wraps all Gemini conversation turns,
  * without climbing so high that we accidentally include the sidebar.
  *
@@ -129,7 +199,33 @@ async function takeAIStudioScreenshot(threadEl: HTMLElement, isDarkMode: boolean
         anc = anc.parentElement
     }
 
+    // The layout has changed dramatically — give Angular CDK Virtual Scroll time
+    // to detect the new "viewport" (now unbounded) and render all items.
+    // A single rAF is not enough; CDK's checkViewportSize is debounced.
     await new Promise(r => requestAnimationFrame(r))
+    await new Promise(r => requestAnimationFrame(r))
+    // Trigger a resize event to nudge any size-dependent observers
+    window.dispatchEvent(new Event('resize'))
+    await new Promise(r => setTimeout(r, 300))
+
+    // Verify every turn has rendered content. For any that are still virtualised
+    // (empty .turn-content), scroll them into view and wait. Repeat up to 5
+    // passes — each pass renders more items and reduces the empty set.
+    for (let pass = 0; pass < 5; pass++) {
+        const allTurns = Array.from(document.querySelectorAll<HTMLElement>('ms-chat-turn'))
+        const empty = allTurns.filter((turn) => {
+            const content = turn.querySelector('[data-turn-role] .turn-content')
+            return !content?.children.length
+        })
+        if (empty.length === 0) break
+
+        for (const turn of empty) {
+            turn.scrollIntoView({ block: 'center', behavior: 'instant' })
+            await new Promise(r => setTimeout(r, 120))
+        }
+    }
+    // Final settle so all rendering completes before capture
+    await new Promise(r => setTimeout(r, 200))
 
     const fullWidth = threadEl.scrollWidth
     const fullHeight = threadEl.scrollHeight
@@ -282,7 +378,24 @@ export async function exportToPng(fileNameFormat: string) {
 
     const effect = new Effect()
 
-    let thread = document.querySelector('#thread div:has(> [data-testid="conversation-turn-1"])')
+    // ChatGPT: the element that directly parents all turns is wide (full viewport),
+    // so we look one level deeper — the turns' own parent element — which is the
+    // narrower content column. Fall back to the wider container if needed.
+    let thread: Element | null = null
+    {
+        const firstTurn = document.querySelector<HTMLElement>('[data-testid="conversation-turn-1"]')
+        if (firstTurn) {
+            // Prefer the first turn's direct parent (narrower content column).
+            // Only use it if it actually contains multiple turns (not a single-turn wrapper).
+            const directParent = firstTurn.parentElement
+            if (directParent && directParent.querySelectorAll('[data-testid^="conversation-turn-"]').length > 0) {
+                thread = directParent
+            }
+            else {
+                thread = document.querySelector('#thread div:has(> [data-testid="conversation-turn-1"])')
+            }
+        }
+    }
     let isClaude = false
     let isGemini = false
     let isAIStudio = false
@@ -385,11 +498,29 @@ export async function exportToPng(fileNameFormat: string) {
             `
         }
         else {
+            // ChatGPT: remove horizontal padding/centering from the thread container
+            // so the captured image has no empty side margins.
+            const chatBg = isDarkMode ? '#212121' : '#fff'
+            const chatFg = isDarkMode ? '#ececec' : '#0d0d0d'
             style.textContent = `
                 #thread div:has(> [data-testid="conversation-turn-1"]),
                 #thread [data-testid^="conversation-turn-"] {
-                    color: ${isDarkMode ? '#ececec' : '#0d0d0d'};
-                    background-color: ${isDarkMode ? '#212121' : '#fff'};
+                    color: ${chatFg};
+                    background-color: ${chatBg};
+                }
+
+                /* Remove horizontal padding from the container and turns to eliminate
+                   empty side margins in the captured image */
+                #thread div:has(> [data-testid="conversation-turn-1"]) {
+                    padding-left: 0 !important;
+                    padding-right: 0 !important;
+                }
+                #thread [data-testid^="conversation-turn-"] > * {
+                    max-width: 100% !important;
+                    margin-left: 0 !important;
+                    margin-right: 0 !important;
+                    padding-left: 16px !important;
+                    padding-right: 16px !important;
                 }
 
                 /* https://github.com/niklasvh/html2canvas/issues/2775#issuecomment-1204988157 */
@@ -423,6 +554,14 @@ export async function exportToPng(fileNameFormat: string) {
                 #thread pre button {
                     visibility: hidden;
                 }
+
+                /* Sticky elements render at wrong positions relative to the cloned document
+                   root — convert to relative so they appear in their natural document flow */
+                #thread .sticky {
+                    position: relative !important;
+                    top: auto !important;
+                    bottom: auto !important;
+                }
             `
         }
 
@@ -436,13 +575,24 @@ export async function exportToPng(fileNameFormat: string) {
 
     await sleep(100)
 
+    // Convert cross-origin <img>s to data URLs so they appear in the screenshot.
+    // Without this, html-to-image cannot fetch them due to CORS, and html2canvas
+    // can only handle them when the original element was crossorigin="anonymous".
+    const restoreImages = await inlineImagesInElement(threadEl)
+
     let dataUrl: string | null = null
 
     const takeHtml2canvasScreenshot = async (el: HTMLElement): Promise<string | null> => {
         const passLimit = 10
+        // Most browsers cap canvas at 16 384 px per dimension; exceeding it silently
+        // truncates the output, which causes blank areas rather than thrown errors.
+        const MAX_CANVAS_DIM = 16384
         const take = async (width: number, height: number, additionalScale = 1, currentPass = 1): Promise<string | null> => {
             const ratio = window.devicePixelRatio || 1
-            const scale = ratio * 2 * additionalScale
+            // Pre-limit scale so the canvas never exceeds browser dimension limits
+            let scale = ratio * 2 * additionalScale
+            if (height * scale > MAX_CANVAS_DIM) scale = Math.min(scale, MAX_CANVAS_DIM / height)
+            if (width * scale > MAX_CANVAS_DIM) scale = Math.min(scale, MAX_CANVAS_DIM / width)
 
             let canvas: HTMLCanvasElement | null = null
             try {
@@ -482,10 +632,87 @@ export async function exportToPng(fileNameFormat: string) {
     else if (isGemini) {
         dataUrl = await takeGeminiScreenshot(threadEl, isDarkMode)
     }
-    else {
+    else if (isClaude) {
+        // Claude was working with html2canvas + useCORS — keep it simple here
         dataUrl = await takeHtml2canvasScreenshot(threadEl)
     }
+    else {
+        // For ChatGPT: constrain the container width to the actual content column
+        // so the screenshot has no empty side margins, then capture.
+        //
+        // Primary renderer: html-to-image (clone-based, avoids html2canvas's
+        // silent canvas-height truncation which causes blank strips in the middle
+        // of long conversations).
+        // Fallback: html2canvas.
+        const savedWidth = threadEl.style.width
+        const savedMaxWidth = threadEl.style.maxWidth
+        const savedMargin = threadEl.style.margin
+        let targetWidth = 0
+        const innerCandidates = Array.from(threadEl.querySelectorAll<HTMLElement>(
+            '[data-testid^="conversation-turn-"] [class*="max-w"]',
+        ))
+        for (const cand of innerCandidates) {
+            const cs = getComputedStyle(cand)
+            const mw = Number.parseFloat(cs.maxWidth)
+            if (!Number.isNaN(mw) && mw > 400 && mw < 1500) {
+                targetWidth = Math.max(targetWidth, mw + 32)
+            }
+        }
+        if (targetWidth === 0) targetWidth = 800
+        if (targetWidth < threadEl.scrollWidth) {
+            threadEl.style.width = `${targetWidth}px`
+            threadEl.style.maxWidth = `${targetWidth}px`
+            threadEl.style.margin = '0'
+            await new Promise(r => requestAnimationFrame(r))
+        }
 
+        // ChatGPT scrolls inside #thread, not the window. Reset it to the top so
+        // coordinates are relative to the conversation start, not the current scroll.
+        const threadScrollEl = document.getElementById('thread')
+        const savedScrollTop = threadScrollEl?.scrollTop ?? 0
+        if (threadScrollEl) threadScrollEl.scrollTop = 0
+        await new Promise(r => requestAnimationFrame(r))
+
+        const ratio = window.devicePixelRatio || 1
+        const chatBg = isDarkMode ? '#212121' : '#fff'
+
+        // Primary: html-to-image renders via SVG clone — no per-tile canvas size limit,
+        // and sticky elements are rendered at their natural document flow position.
+        try {
+            const url = await htmlToImage.toPng(threadEl, {
+                pixelRatio: ratio * 2,
+                backgroundColor: chatBg,
+                width: threadEl.scrollWidth,
+                height: threadEl.scrollHeight,
+                skipFonts: true,
+                filter: (node: Node) => {
+                    if (!(node instanceof Element)) return true
+                    const nodeEl = node as HTMLElement
+                    if (nodeEl.id === 'thread-bottom-container' || nodeEl.id === 'page-header') return false
+                    return true
+                },
+            })
+            if (url && url !== 'data:,') {
+                dataUrl = url.replace(/^data:image\/[^;]+/, 'data:application/octet-stream')
+            }
+        }
+        catch (e) {
+            console.warn('[Exporter] html-to-image failed for ChatGPT, trying html2canvas', e)
+        }
+
+        // Fallback: html2canvas (scale is pre-limited inside takeHtml2canvasScreenshot)
+        if (!dataUrl) {
+            dataUrl = await takeHtml2canvasScreenshot(threadEl)
+        }
+
+        // Restore scroll and element styles
+        if (threadScrollEl) threadScrollEl.scrollTop = savedScrollTop
+        threadEl.style.width = savedWidth
+        threadEl.style.maxWidth = savedMaxWidth
+        threadEl.style.margin = savedMargin
+    }
+
+    restoreImages()
     effect.dispose()
 
     if (!dataUrl) {

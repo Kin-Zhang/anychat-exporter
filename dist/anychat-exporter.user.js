@@ -22676,6 +22676,55 @@ ${content2.text}
     if (GEMINI_CAPTURE_TAGS.has(String(el.tagName).toLowerCase())) return false;
     return typeof el.shadowRoot === "object" && el.shadowRoot !== null;
   }
+  async function inlineImagesInElement(root2) {
+    const restoreFns = [];
+    const imgs = Array.from(root2.querySelectorAll("img"));
+    const tryDraw = (el) => {
+      try {
+        if (!el.complete || el.naturalWidth === 0) return null;
+        const canvas = document.createElement("canvas");
+        canvas.width = el.naturalWidth;
+        canvas.height = el.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return null;
+        ctx.drawImage(el, 0, 0);
+        return canvas.toDataURL("image/png");
+      } catch {
+        return null;
+      }
+    };
+    await Promise.all(imgs.map(async (img) => {
+      const originalSrc = img.src;
+      const originalSrcset = img.srcset;
+      if (!originalSrc || originalSrc.startsWith("data:") || originalSrc.startsWith("blob:")) return;
+      let dataUrl = tryDraw(img);
+      if (!dataUrl) {
+        dataUrl = await new Promise((resolve) => {
+          const fresh = new Image();
+          fresh.crossOrigin = "anonymous";
+          const timer = setTimeout(() => resolve(null), 8e3);
+          fresh.onload = () => {
+            clearTimeout(timer);
+            resolve(tryDraw(fresh));
+          };
+          fresh.onerror = () => {
+            clearTimeout(timer);
+            resolve(null);
+          };
+          fresh.src = originalSrc;
+        });
+      }
+      if (dataUrl) {
+        if (originalSrcset) img.srcset = "";
+        img.src = dataUrl;
+        restoreFns.push(() => {
+          img.src = originalSrc;
+          if (originalSrcset) img.srcset = originalSrcset;
+        });
+      }
+    }));
+    return () => restoreFns.forEach((fn2) => fn2());
+  }
   function findGeminiThread() {
     const allScrollers = Array.from(document.querySelectorAll("infinite-scroller"));
     const chatScroller = allScrollers.find((el) => el.querySelector(".conversation-container, user-query, model-response") !== null);
@@ -22740,6 +22789,22 @@ ${content2.text}
       anc = anc.parentElement;
     }
     await new Promise((r2) => requestAnimationFrame(r2));
+    await new Promise((r2) => requestAnimationFrame(r2));
+    window.dispatchEvent(new Event("resize"));
+    await new Promise((r2) => setTimeout(r2, 300));
+    for (let pass = 0; pass < 5; pass++) {
+      const allTurns = Array.from(document.querySelectorAll("ms-chat-turn"));
+      const empty = allTurns.filter((turn) => {
+        const content2 = turn.querySelector("[data-turn-role] .turn-content");
+        return !(content2 == null ? void 0 : content2.children.length);
+      });
+      if (empty.length === 0) break;
+      for (const turn of empty) {
+        turn.scrollIntoView({ block: "center", behavior: "instant" });
+        await new Promise((r2) => setTimeout(r2, 120));
+      }
+    }
+    await new Promise((r2) => setTimeout(r2, 200));
     const fullWidth = threadEl.scrollWidth;
     const fullHeight = threadEl.scrollHeight;
     let dataUrl = null;
@@ -22860,7 +22925,18 @@ ${content2.text}
       return false;
     }
     const effect = new Effect();
-    let thread = document.querySelector('#thread div:has(> [data-testid="conversation-turn-1"])');
+    let thread = null;
+    {
+      const firstTurn = document.querySelector('[data-testid="conversation-turn-1"]');
+      if (firstTurn) {
+        const directParent = firstTurn.parentElement;
+        if (directParent && directParent.querySelectorAll('[data-testid^="conversation-turn-"]').length > 0) {
+          thread = directParent;
+        } else {
+          thread = document.querySelector('#thread div:has(> [data-testid="conversation-turn-1"])');
+        }
+      }
+    }
     let isClaude = false;
     let isGemini = false;
     let isAIStudio = false;
@@ -22947,11 +23023,27 @@ ${content2.text}
                 }
             `;
       } else {
+        const chatBg = isDarkMode ? "#212121" : "#fff";
+        const chatFg = isDarkMode ? "#ececec" : "#0d0d0d";
         style.textContent = `
                 #thread div:has(> [data-testid="conversation-turn-1"]),
                 #thread [data-testid^="conversation-turn-"] {
-                    color: ${isDarkMode ? "#ececec" : "#0d0d0d"};
-                    background-color: ${isDarkMode ? "#212121" : "#fff"};
+                    color: ${chatFg};
+                    background-color: ${chatBg};
+                }
+
+                /* Remove horizontal padding from the container and turns to eliminate
+                   empty side margins in the captured image */
+                #thread div:has(> [data-testid="conversation-turn-1"]) {
+                    padding-left: 0 !important;
+                    padding-right: 0 !important;
+                }
+                #thread [data-testid^="conversation-turn-"] > * {
+                    max-width: 100% !important;
+                    margin-left: 0 !important;
+                    margin-right: 0 !important;
+                    padding-left: 16px !important;
+                    padding-right: 16px !important;
                 }
 
                 /* https://github.com/niklasvh/html2canvas/issues/2775#issuecomment-1204988157 */
@@ -22985,6 +23077,14 @@ ${content2.text}
                 #thread pre button {
                     visibility: hidden;
                 }
+
+                /* Sticky elements render at wrong positions relative to the cloned document
+                   root — convert to relative so they appear in their natural document flow */
+                #thread .sticky {
+                    position: relative !important;
+                    top: auto !important;
+                    bottom: auto !important;
+                }
             `;
       }
       thread.appendChild(style);
@@ -22993,12 +23093,16 @@ ${content2.text}
     const threadEl = thread;
     effect.run();
     await sleep(100);
+    const restoreImages = await inlineImagesInElement(threadEl);
     let dataUrl = null;
     const takeHtml2canvasScreenshot = async (el) => {
       const passLimit = 10;
+      const MAX_CANVAS_DIM = 16384;
       const take = async (width, height, additionalScale = 1, currentPass = 1) => {
         const ratio = window.devicePixelRatio || 1;
-        const scale = ratio * 2 * additionalScale;
+        let scale = ratio * 2 * additionalScale;
+        if (height * scale > MAX_CANVAS_DIM) scale = Math.min(scale, MAX_CANVAS_DIM / height);
+        if (width * scale > MAX_CANVAS_DIM) scale = Math.min(scale, MAX_CANVAS_DIM / width);
         let canvas = null;
         try {
           canvas = await html2canvas(el, {
@@ -23028,9 +23132,65 @@ ${content2.text}
       dataUrl = await takeAIStudioScreenshot(threadEl, isDarkMode);
     } else if (isGemini) {
       dataUrl = await takeGeminiScreenshot(threadEl, isDarkMode);
-    } else {
+    } else if (isClaude) {
       dataUrl = await takeHtml2canvasScreenshot(threadEl);
+    } else {
+      const savedWidth = threadEl.style.width;
+      const savedMaxWidth = threadEl.style.maxWidth;
+      const savedMargin = threadEl.style.margin;
+      let targetWidth = 0;
+      const innerCandidates = Array.from(threadEl.querySelectorAll(
+        '[data-testid^="conversation-turn-"] [class*="max-w"]'
+      ));
+      for (const cand of innerCandidates) {
+        const cs = getComputedStyle(cand);
+        const mw = Number.parseFloat(cs.maxWidth);
+        if (!Number.isNaN(mw) && mw > 400 && mw < 1500) {
+          targetWidth = Math.max(targetWidth, mw + 32);
+        }
+      }
+      if (targetWidth === 0) targetWidth = 800;
+      if (targetWidth < threadEl.scrollWidth) {
+        threadEl.style.width = `${targetWidth}px`;
+        threadEl.style.maxWidth = `${targetWidth}px`;
+        threadEl.style.margin = "0";
+        await new Promise((r2) => requestAnimationFrame(r2));
+      }
+      const threadScrollEl = document.getElementById("thread");
+      const savedScrollTop = (threadScrollEl == null ? void 0 : threadScrollEl.scrollTop) ?? 0;
+      if (threadScrollEl) threadScrollEl.scrollTop = 0;
+      await new Promise((r2) => requestAnimationFrame(r2));
+      const ratio = window.devicePixelRatio || 1;
+      const chatBg = isDarkMode ? "#212121" : "#fff";
+      try {
+        const url = await toPng(threadEl, {
+          pixelRatio: ratio * 2,
+          backgroundColor: chatBg,
+          width: threadEl.scrollWidth,
+          height: threadEl.scrollHeight,
+          skipFonts: true,
+          filter: (node2) => {
+            if (!(node2 instanceof Element)) return true;
+            const nodeEl = node2;
+            if (nodeEl.id === "thread-bottom-container" || nodeEl.id === "page-header") return false;
+            return true;
+          }
+        });
+        if (url && url !== "data:,") {
+          dataUrl = url.replace(/^data:image\/[^;]+/, "data:application/octet-stream");
+        }
+      } catch (e2) {
+        console.warn("[Exporter] html-to-image failed for ChatGPT, trying html2canvas", e2);
+      }
+      if (!dataUrl) {
+        dataUrl = await takeHtml2canvasScreenshot(threadEl);
+      }
+      if (threadScrollEl) threadScrollEl.scrollTop = savedScrollTop;
+      threadEl.style.width = savedWidth;
+      threadEl.style.maxWidth = savedMaxWidth;
+      threadEl.style.margin = savedMargin;
     }
+    restoreImages();
     effect.dispose();
     if (!dataUrl) {
       alert("Failed to export to PNG. This might be caused by the size of the conversation. Please try to export a smaller conversation.");
