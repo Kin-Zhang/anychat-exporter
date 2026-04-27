@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.0.2](https://github.com/Kin-Zhang/anychat-exporter/compare/userscript-v3.0.1...userscript-v3.0.2) (2026-04-27)
+
+
+### Bug Fixes
+
+* **aistudio+image:** fix Google AI Studio export after UI refresh and screenshot margins ([a1f9a19](https://github.com/Kin-Zhang/anychat-exporter/commit/a1f9a19c27d992f3b471c2cc204471af1cbd825c))
+* **aistudio:** scroll turns into view before extraction to defeat virtual scroll ([446b7d1](https://github.com/Kin-Zhang/anychat-exporter/commit/446b7d13248dac30dd7b102f653223bd18d66940))
+* **aistudio:** update selectors for Google AI Studio UI refresh ([e21e7f1](https://github.com/Kin-Zhang/anychat-exporter/commit/e21e7f1a03d01e51e1cb70bc9aedb1a6bc9dedb2))
+* **image:** fix blank user turns in AI Studio screenshot and ChatGPT margins ([4d25ab0](https://github.com/Kin-Zhang/anychat-exporter/commit/4d25ab0660ae8ad8e75c8ddd1c0c8e53492e78ae))
+* **image:** fix ChatGPT screenshot blank area in the middle ([ff03a13](https://github.com/Kin-Zhang/anychat-exporter/commit/ff03a1376ff0b4469e26610b7ae150a62af63aad))
+* **image:** inline cross-origin images so they appear in screenshots ([88a85a9](https://github.com/Kin-Zhang/anychat-exporter/commit/88a85a90ec3594c7d826ed0ee15d8704cb915045))
+* **image:** proper render-all + correct width detection for AI Studio/ChatGPT ([d88a52c](https://github.com/Kin-Zhang/anychat-exporter/commit/d88a52ce50509d98c85dc6b9aafab915073e9f45))
+
 ## [3.0.1](https://github.com/Kin-Zhang/anychat-exporter/compare/userscript-v3.0.0...userscript-v3.0.1) (2026-04-09)
 
 
