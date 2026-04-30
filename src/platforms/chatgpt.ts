@@ -40,72 +40,77 @@ export class ChatGPTAdapter implements PlatformAdapter {
     }
 
     injectUI(getContainer: () => HTMLElement): void {
-        // We don't trust any single ChatGPT sidebar selector — they've changed
-        // the DOM several times. Try multiple anchors in priority order on every
-        // tick, and never fall back to a floating overlay that can sit on top
-        // of the chat list.
+        // ChatGPT's sidebar DOM has changed several times. Rather than relying on
+        // a brittle fixed selector, we find the structural "bottom block" of the
+        // sidebar — the row that holds the user/profile button — and insert our
+        // container right before it. That keeps the export button docked next
+        // to the account menu instead of floating in the chat list or sitting
+        // at the very top.
         interface Slot {
-            // Where the container should currently live; recomputed each tick.
             parent: HTMLElement
-            // Sibling to insert before (null = append).
             before: HTMLElement | null
         }
-
+        const EXPORTER_MARK = 'data-anychat-exporter'
         const injectionMap = new Map<HTMLElement, HTMLElement>()
 
-        const findSlot = (nav: HTMLElement): Slot | null => {
-            // 1. Bottom user/profile area: prefer placing right above it so the
-            //    export button shares the sidebar footer with the account menu.
-            const profileButton = nav.querySelector<HTMLElement>(
-                'button[data-testid="profile-button"], '
-                + 'button[data-testid="accounts-profile-button"], '
-                + 'button[aria-label*="account" i], '
-                + 'button[aria-label*="profile" i]',
-            )
-            if (profileButton) {
-                // Walk up to the row container (a direct child of nav or aside)
-                // so the button isn't trapped inside the profile button itself.
-                let row: HTMLElement | null = profileButton
-                while (row && row.parentElement && row.parentElement !== nav && !row.parentElement.matches('aside, [class*="sidebar"]')) {
-                    row = row.parentElement
-                }
-                if (row?.parentElement) {
-                    return { parent: row.parentElement, before: row }
-                }
-            }
+        const isVisible = (el: HTMLElement) => {
+            if (!el.isConnected) return false
+            // offsetParent is null for display:none and for fixed elements off-screen,
+            // but our siblings here are normal flow elements.
+            const rect = el.getBoundingClientRect()
+            return rect.width > 0 && rect.height > 0
+        }
 
-            // 2. Legacy sticky bottom container.
-            const stickyBottom = nav.querySelector<HTMLElement>(':scope > div.sticky.bottom-0, :scope aside div.sticky.bottom-0')
-            if (stickyBottom) {
-                return { parent: stickyBottom, before: stickyBottom.firstElementChild as HTMLElement | null }
-            }
+        // Pick the deepest container in the sidebar whose direct children are
+        // the top-level sidebar sections (history list, footer/user block, etc.).
+        // ChatGPT sometimes wraps the sidebar in an extra <aside>.
+        const findSidebarRoot = (nav: HTMLElement): HTMLElement => {
+            const aside = nav.querySelector<HTMLElement>(':scope > aside')
+            if (aside) return aside
+            // If the nav has a single wrapper child that itself holds the layout, use that.
+            const onlyChild = nav.children.length === 1 ? nav.firstElementChild as HTMLElement : null
+            if (onlyChild && onlyChild.children.length >= 2) return onlyChild
+            return nav
+        }
 
-            // 3. Any descendant with computed position: sticky in the lower half of the nav.
-            const candidates = Array.from(nav.querySelectorAll<HTMLElement>('div, aside'))
-            const navRect = nav.getBoundingClientRect()
-            for (const el of candidates) {
-                if (getComputedStyle(el).position !== 'sticky') continue
-                const rect = el.getBoundingClientRect()
-                if (rect.top >= navRect.top + navRect.height / 2) {
-                    return { parent: el, before: el.firstElementChild as HTMLElement | null }
-                }
+        // The user/profile block is the last visible direct child of the sidebar
+        // root, ignoring our own injected container.
+        const findFooterRow = (root: HTMLElement, container: HTMLElement): HTMLElement | null => {
+            for (let i = root.children.length - 1; i >= 0; i--) {
+                const el = root.children[i] as HTMLElement
+                if (el === container) continue
+                if (el.contains(container)) continue
+                if (!isVisible(el)) continue
+                return el
             }
+            return null
+        }
 
-            // 4. Fallback: top of the nav, as a regular block. Never float.
-            return { parent: nav, before: nav.firstElementChild as HTMLElement | null }
+        const findSlot = (nav: HTMLElement, container: HTMLElement): Slot | null => {
+            const root = findSidebarRoot(nav)
+            const footer = findFooterRow(root, container)
+            if (footer) {
+                return { parent: root, before: footer }
+            }
+            // Sidebar isn't ready yet — don't inject anywhere visible. Returning
+            // null means "wait for the next tick" rather than dropping the button
+            // at the top of the sidebar.
+            return null
         }
 
         const reconcile = (nav: HTMLElement) => {
             let container = injectionMap.get(nav)
             if (!container) {
                 container = getContainer()
+                container.setAttribute(EXPORTER_MARK, '')
                 injectionMap.set(nav, container)
-                console.warn('[Exporter] Tracking nav for injection', nav)
             }
 
-            const slot = findSlot(nav)
-            if (!slot) return
-            // Don't reparent into our own container.
+            const slot = findSlot(nav, container)
+            if (!slot) {
+                // Detach if we're currently in a stale slot.
+                return
+            }
             if (slot.parent === container || container.contains(slot.parent)) return
 
             const alreadyPlaced = container.parentElement === slot.parent
@@ -117,6 +122,13 @@ export class ChatGPTAdapter implements PlatformAdapter {
 
         sentinel.on('nav', reconcile)
 
+        const isSidebarNav = (nav: HTMLElement) => {
+            // Sidebar nav fills most of the viewport height; header / breadcrumb
+            // navs are short. This avoids injecting into the wrong <nav>.
+            const rect = nav.getBoundingClientRect()
+            return rect.height >= Math.min(400, window.innerHeight * 0.5)
+        }
+
         setInterval(() => {
             injectionMap.forEach((container, nav) => {
                 if (!nav.isConnected) {
@@ -124,7 +136,9 @@ export class ChatGPTAdapter implements PlatformAdapter {
                     injectionMap.delete(nav)
                 }
             })
-            Array.from(document.querySelectorAll<HTMLElement>('nav')).forEach(reconcile)
+            Array.from(document.querySelectorAll<HTMLElement>('nav'))
+                .filter(isSidebarNav)
+                .forEach(reconcile)
         }, 300)
     }
 }

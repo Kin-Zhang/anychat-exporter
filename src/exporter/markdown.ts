@@ -1,6 +1,6 @@
 import JSZip from 'jszip'
 import { processConversation } from '../api'
-import { KEY_TIMESTAMP_24H, KEY_TIMESTAMP_ENABLED, KEY_TIMESTAMP_MARKDOWN, KEY_USER_CONTENT_LIMIT, KEY_USER_CONTENT_LIMIT_ENABLED, baseUrl } from '../constants'
+import { KEY_TIMESTAMP_24H, KEY_TIMESTAMP_ENABLED, KEY_TIMESTAMP_MARKDOWN, KEY_USER_CONTENT_LIMIT, baseUrl } from '../constants'
 import i18n from '../i18n'
 import { checkIfConversationStarted, fetchCurrentConversation } from '../platforms/service'
 import { buildZipFileName, downloadFile, getFileNameWithFormat } from '../utils/download'
@@ -91,7 +91,6 @@ function conversationToMarkdown(conversation: ConversationResult, metaList?: Exp
     const timeStampMarkdown = ScriptStorage.get<boolean>(KEY_TIMESTAMP_MARKDOWN) ?? false
     const timeStamp24H = ScriptStorage.get<boolean>(KEY_TIMESTAMP_24H) ?? false
 
-    const limitUserContent = ScriptStorage.get<boolean>(KEY_USER_CONTENT_LIMIT_ENABLED) ?? false
     const userContentLimit = ScriptStorage.get<number>(KEY_USER_CONTENT_LIMIT) ?? 0
 
     const content = conversationNodes.map(({ message }) => {
@@ -175,7 +174,7 @@ function conversationToMarkdown(conversation: ConversationResult, metaList?: Exp
                 return transformed
             })
         }
-        if (message.author.role === 'user' && limitUserContent && userContentLimit > 0) {
+        if (message.author.role === 'user' && userContentLimit > 0) {
             postSteps.push((input) => {
                 if (input.length <= userContentLimit) return input
                 const cut = input.length - userContentLimit

@@ -19,7 +19,6 @@ export const KEY_META_ENABLED = 'exporter:enable_meta'
 export const KEY_META_LIST = 'exporter:meta_list'
 export const KEY_EXPORT_ALL_LIMIT = 'exporter:export_all_limit'
 export const KEY_COPY_TEXT_INCLUDE_ATTACHMENTS = 'exporter:copy_text_include_attachments'
-export const KEY_USER_CONTENT_LIMIT_ENABLED = 'exporter:user_content_limit_enabled'
 export const KEY_USER_CONTENT_LIMIT = 'exporter:user_content_limit'
 
 export const KEY_OAI_LOCALE = 'oai/apps/locale'

@@ -1209,7 +1209,6 @@ html {
   const KEY_META_LIST = "exporter:meta_list";
   const KEY_EXPORT_ALL_LIMIT = "exporter:export_all_limit";
   const KEY_COPY_TEXT_INCLUDE_ATTACHMENTS = "exporter:copy_text_include_attachments";
-  const KEY_USER_CONTENT_LIMIT_ENABLED = "exporter:user_content_limit_enabled";
   const KEY_USER_CONTENT_LIMIT = "exporter:user_content_limit";
   const KEY_OAI_LOCALE = "oai/apps/locale";
   const KEY_OAI_HISTORY_DISABLED = "oai/apps/historyDisabled";
@@ -1874,50 +1873,59 @@ html {
       return getUserAvatar$1();
     }
     injectUI(getContainer) {
+      const EXPORTER_MARK = "data-anychat-exporter";
       const injectionMap = /* @__PURE__ */ new Map();
-      const findSlot = (nav) => {
-        const profileButton = nav.querySelector(
-          'button[data-testid="profile-button"], button[data-testid="accounts-profile-button"], button[aria-label*="account" i], button[aria-label*="profile" i]'
-        );
-        if (profileButton) {
-          let row = profileButton;
-          while (row && row.parentElement && row.parentElement !== nav && !row.parentElement.matches('aside, [class*="sidebar"]')) {
-            row = row.parentElement;
-          }
-          if (row == null ? void 0 : row.parentElement) {
-            return { parent: row.parentElement, before: row };
-          }
+      const isVisible = (el) => {
+        if (!el.isConnected) return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      };
+      const findSidebarRoot = (nav) => {
+        const aside = nav.querySelector(":scope > aside");
+        if (aside) return aside;
+        const onlyChild = nav.children.length === 1 ? nav.firstElementChild : null;
+        if (onlyChild && onlyChild.children.length >= 2) return onlyChild;
+        return nav;
+      };
+      const findFooterRow = (root2, container) => {
+        for (let i2 = root2.children.length - 1; i2 >= 0; i2--) {
+          const el = root2.children[i2];
+          if (el === container) continue;
+          if (el.contains(container)) continue;
+          if (!isVisible(el)) continue;
+          return el;
         }
-        const stickyBottom = nav.querySelector(":scope > div.sticky.bottom-0, :scope aside div.sticky.bottom-0");
-        if (stickyBottom) {
-          return { parent: stickyBottom, before: stickyBottom.firstElementChild };
+        return null;
+      };
+      const findSlot = (nav, container) => {
+        const root2 = findSidebarRoot(nav);
+        const footer2 = findFooterRow(root2, container);
+        if (footer2) {
+          return { parent: root2, before: footer2 };
         }
-        const candidates = Array.from(nav.querySelectorAll("div, aside"));
-        const navRect = nav.getBoundingClientRect();
-        for (const el of candidates) {
-          if (getComputedStyle(el).position !== "sticky") continue;
-          const rect = el.getBoundingClientRect();
-          if (rect.top >= navRect.top + navRect.height / 2) {
-            return { parent: el, before: el.firstElementChild };
-          }
-        }
-        return { parent: nav, before: nav.firstElementChild };
+        return null;
       };
       const reconcile = (nav) => {
         let container = injectionMap.get(nav);
         if (!container) {
           container = getContainer();
+          container.setAttribute(EXPORTER_MARK, "");
           injectionMap.set(nav, container);
-          console.warn("[Exporter] Tracking nav for injection", nav);
         }
-        const slot = findSlot(nav);
-        if (!slot) return;
+        const slot = findSlot(nav, container);
+        if (!slot) {
+          return;
+        }
         if (slot.parent === container || container.contains(slot.parent)) return;
         const alreadyPlaced = container.parentElement === slot.parent && container.nextElementSibling === slot.before;
         if (alreadyPlaced) return;
         slot.parent.insertBefore(container, slot.before);
       };
       sentinel.on("nav", reconcile);
+      const isSidebarNav = (nav) => {
+        const rect = nav.getBoundingClientRect();
+        return rect.height >= Math.min(400, window.innerHeight * 0.5);
+      };
       setInterval(() => {
         injectionMap.forEach((container, nav) => {
           if (!nav.isConnected) {
@@ -1925,7 +1933,7 @@ html {
             injectionMap.delete(nav);
           }
         });
-        Array.from(document.querySelectorAll("nav")).forEach(reconcile);
+        Array.from(document.querySelectorAll("nav")).filter(isSidebarNav).forEach(reconcile);
       }, 300);
     }
   }
@@ -9019,8 +9027,9 @@ ${json}
     "Copy Text Attachments": "Copy Text Attachments",
     "Copy Text Attachments Description": "Include attachment content (e.g. extracted text from uploaded files) when copying text.",
     "User Content Limit": "User Content Limit",
-    "User Content Limit Description": "Truncate long user messages on export. Markdown gets a hard cut; HTML keeps the full text inside a collapsed <details> block.",
-    characters: characters$2
+    "User Content Limit Description": "Per-message character cap for user messages on export. 0 = no limit. Markdown is hard-truncated; HTML keeps the full text inside a collapsed <details> block.",
+    characters: characters$2,
+    "No limit (0 = unlimited)": "No limit (0 = unlimited)"
   };
   const title$7 = "ChatGPT Exporter";
   const ExportHelper$7 = "Exportar";
@@ -9485,8 +9494,9 @@ ${json}
     "Copy Text Attachments": "复制文本含附件",
     "Copy Text Attachments Description": "复制文本时是否包含附件内容（如上传文件的提取文本）。",
     "User Content Limit": "用户内容字数限制",
-    "User Content Limit Description": "导出时截断过长的用户消息。Markdown 直接截断，HTML 把超出部分放进可折叠的 <details> 块。",
-    characters: characters$1
+    "User Content Limit Description": "导出时按字符数限制每条用户消息长度。0 表示不限制。Markdown 会直接截断，HTML 会把超出部分放进可折叠的 <details> 块。",
+    characters: characters$1,
+    "No limit (0 = unlimited)": "无限制（0 表示不限制）"
   };
   const title = "ChatGPT Exporter";
   const ExportHelper = "Export";
@@ -21769,7 +21779,6 @@ ${json}
     const enableTimestamp = ScriptStorage.get(KEY_TIMESTAMP_ENABLED) ?? false;
     const timeStampHtml = ScriptStorage.get(KEY_TIMESTAMP_HTML) ?? false;
     const timeStamp24H = ScriptStorage.get(KEY_TIMESTAMP_24H) ?? false;
-    const limitUserContent = ScriptStorage.get(KEY_USER_CONTENT_LIMIT_ENABLED) ?? false;
     const userContentLimit = ScriptStorage.get(KEY_USER_CONTENT_LIMIT) ?? 0;
     const LatexRegex2 = /(\s\$\$.+?\$\$\s|\s\$.+?\$\s|\\\[.+?\\\]|\\\(.+?\\\))|(^\$$[\S\s]+?^\$$)|(^\$\$[\S\s]+?^\$\$\$)/gm;
     const conversationHtml = conversationNodes.map(({ message }) => {
@@ -21818,7 +21827,7 @@ ${json}
       }
       if (message.author.role === "user") {
         postSteps = [...postSteps, (input) => {
-          if (limitUserContent && userContentLimit > 0 && input.length > userContentLimit) {
+          if (userContentLimit > 0 && input.length > userContentLimit) {
             const head2 = input.slice(0, userContentLimit);
             const rest = input.slice(userContentLimit);
             return `<p class="no-katex">${escapeHtml(head2)}</p><details class="user-truncated"><summary>… show ${rest.length} more characters</summary><p class="no-katex">${escapeHtml(rest)}</p></details>`;
@@ -23558,7 +23567,6 @@ ${_metaList.join("\n")}
     const enableTimestamp = ScriptStorage.get(KEY_TIMESTAMP_ENABLED) ?? false;
     const timeStampMarkdown = ScriptStorage.get(KEY_TIMESTAMP_MARKDOWN) ?? false;
     const timeStamp24H = ScriptStorage.get(KEY_TIMESTAMP_24H) ?? false;
-    const limitUserContent = ScriptStorage.get(KEY_USER_CONTENT_LIMIT_ENABLED) ?? false;
     const userContentLimit = ScriptStorage.get(KEY_USER_CONTENT_LIMIT) ?? 0;
     const content2 = conversationNodes.map(({ message }) => {
       var _a, _b, _c, _d;
@@ -23612,7 +23620,7 @@ ${_metaList.join("\n")}
           return transformed;
         });
       }
-      if (message.author.role === "user" && limitUserContent && userContentLimit > 0) {
+      if (message.author.role === "user" && userContentLimit > 0) {
         postSteps.push((input) => {
           if (input.length <= userContentLimit) return input;
           const cut = input.length - userContentLimit;
@@ -24169,7 +24177,7 @@ ${content2}`;
   }
   const defaultFormat = "{platform}-{title}";
   const defaultExportAllLimit = 1e3;
-  const defaultUserContentLimit = 2e3;
+  const defaultUserContentLimit = 0;
   const defaultExportMetaList = [
     { name: "title", value: "{title}" },
     { name: "source", value: "{source}" }
@@ -24202,9 +24210,6 @@ ${content2}`;
     copyTextIncludeAttachments: false,
     setCopyTextIncludeAttachments: (_24) => {
     },
-    enableUserContentLimit: false,
-    setEnableUserContentLimit: (_24) => {
-    },
     userContentLimit: defaultUserContentLimit,
     setUserContentLimit: (_24) => {
     },
@@ -24221,7 +24226,6 @@ ${content2}`;
     const [exportMetaList, setExportMetaList] = useGMStorage(KEY_META_LIST, defaultExportMetaList);
     const [exportAllLimit, setExportAllLimit] = useGMStorage(KEY_EXPORT_ALL_LIMIT, defaultExportAllLimit);
     const [copyTextIncludeAttachments, setCopyTextIncludeAttachments] = useGMStorage(KEY_COPY_TEXT_INCLUDE_ATTACHMENTS, false);
-    const [enableUserContentLimit, setEnableUserContentLimit] = useGMStorage(KEY_USER_CONTENT_LIMIT_ENABLED, false);
     const [userContentLimit, setUserContentLimit] = useGMStorage(KEY_USER_CONTENT_LIMIT, defaultUserContentLimit);
     const resetDefault = T$4(() => {
       setFormat(defaultFormat);
@@ -24230,7 +24234,6 @@ ${content2}`;
       setExportMetaList(defaultExportMetaList);
       setExportAllLimit(defaultExportAllLimit);
       setCopyTextIncludeAttachments(false);
-      setEnableUserContentLimit(false);
       setUserContentLimit(defaultUserContentLimit);
     }, [
       setFormat,
@@ -24239,7 +24242,6 @@ ${content2}`;
       setExportMetaList,
       setExportAllLimit,
       setCopyTextIncludeAttachments,
-      setEnableUserContentLimit,
       setUserContentLimit
     ]);
     return /* @__PURE__ */ o$8(
@@ -24264,8 +24266,6 @@ ${content2}`;
           setExportAllLimit,
           copyTextIncludeAttachments,
           setCopyTextIncludeAttachments,
-          enableUserContentLimit,
-          setEnableUserContentLimit,
           userContentLimit,
           setUserContentLimit,
           resetDefault
@@ -25116,8 +25116,6 @@ ${content2}`;
       setExportAllLimit,
       copyTextIncludeAttachments,
       setCopyTextIncludeAttachments,
-      enableUserContentLimit,
-      setEnableUserContentLimit,
       userContentLimit,
       setUserContentLimit
       /* eslint-enable pionxzh/consistent-list-newline */
@@ -25226,35 +25224,32 @@ ${content2}`;
                     ] })
                   ] })
                 ] }) }),
-                /* @__PURE__ */ o$8("div", { className: "relative flex bg-white dark:bg-white/5 rounded p-4", children: [
-                  /* @__PURE__ */ o$8("div", { children: [
-                    /* @__PURE__ */ o$8("dt", { className: "text-md font-medium text-gray-800 dark:text-white", children: t2("User Content Limit") }),
-                    /* @__PURE__ */ o$8("dd", { className: "text-sm text-gray-700 dark:text-gray-300", children: [
-                      t2("User Content Limit Description"),
-                      enableUserContentLimit && /* @__PURE__ */ o$8("div", { className: "flex items-center gap-4 mt-3", children: [
-                        /* @__PURE__ */ o$8(
-                          "input",
-                          {
-                            type: "number",
-                            min: 100,
-                            step: 100,
-                            value: userContentLimit,
-                            onChange: (e2) => setUserContentLimit(
-                              Math.max(
-                                0,
-                                Number.parseInt(e2.currentTarget.value, 10) || 0
-                              )
-                            ),
-                            className: "Input w-32",
-                            id: "userContentLimit"
-                          }
-                        ),
-                        /* @__PURE__ */ o$8("span", { className: "text-sm text-gray-700 dark:text-gray-300", children: t2("characters") })
-                      ] })
+                /* @__PURE__ */ o$8("div", { className: "relative flex bg-white dark:bg-white/5 rounded p-4", children: /* @__PURE__ */ o$8("div", { children: [
+                  /* @__PURE__ */ o$8("dt", { className: "text-md font-medium text-gray-800 dark:text-white", children: t2("User Content Limit") }),
+                  /* @__PURE__ */ o$8("dd", { className: "text-sm text-gray-700 dark:text-gray-300", children: [
+                    t2("User Content Limit Description"),
+                    /* @__PURE__ */ o$8("div", { className: "flex items-center gap-4 mt-3", children: [
+                      /* @__PURE__ */ o$8(
+                        "input",
+                        {
+                          type: "number",
+                          min: 0,
+                          step: 100,
+                          value: userContentLimit,
+                          onChange: (e2) => setUserContentLimit(
+                            Math.max(
+                              0,
+                              Number.parseInt(e2.currentTarget.value, 10) || 0
+                            )
+                          ),
+                          className: "Input w-32",
+                          id: "userContentLimit"
+                        }
+                      ),
+                      /* @__PURE__ */ o$8("span", { className: "text-sm text-gray-700 dark:text-gray-300", children: userContentLimit === 0 ? t2("No limit (0 = unlimited)") : t2("characters") })
                     ] })
-                  ] }),
-                  /* @__PURE__ */ o$8("div", { className: "absolute right-4", children: /* @__PURE__ */ o$8(Toggle, { label: "", checked: enableUserContentLimit, onCheckedUpdate: setEnableUserContentLimit }) })
-                ] }),
+                  ] })
+                ] }) }),
                 /* @__PURE__ */ o$8("div", { className: "relative flex bg-white dark:bg-white/5 rounded p-4", children: [
                   /* @__PURE__ */ o$8("div", { children: [
                     /* @__PURE__ */ o$8("dt", { className: "text-md font-medium text-gray-800 dark:text-white", children: t2("Copy Text Attachments") }),
