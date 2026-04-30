@@ -40,39 +40,68 @@ export class ChatGPTAdapter implements PlatformAdapter {
     }
 
     injectUI(getContainer: () => HTMLElement): void {
-        const injectionMap = new Map<HTMLElement, HTMLElement>()
+        // Track the container we created for each <nav>, plus when we first saw the nav
+        // so we can defer the floating fallback until ChatGPT clearly isn't going to render
+        // the sticky bottom container.
+        interface Injection {
+            container: HTMLElement
+            firstSeen: number
+            anchored: boolean
+        }
+        const injectionMap = new Map<HTMLElement, Injection>()
+        const FALLBACK_DELAY_MS = 2000
 
-        const injectNavMenu = (nav: HTMLElement) => {
-            if (injectionMap.has(nav)) return
-            console.warn('[Exporter] Injecting nav', nav)
-
-            const container = getContainer()
-            injectionMap.set(nav, container)
-
-            const chatList = nav.querySelector(':scope > div.sticky.bottom-0')
-            if (chatList) {
-                chatList.prepend(container)
-            }
-            else {
-                container.style.backgroundColor = '#171717'
-                container.style.position = 'sticky'
-                container.style.bottom = '72px'
-                nav.append(container)
-            }
+        const applyFloatingStyles = (container: HTMLElement) => {
+            container.style.backgroundColor = '#171717'
+            container.style.position = 'sticky'
+            container.style.bottom = '72px'
         }
 
-        sentinel.on('nav', injectNavMenu)
+        const clearFloatingStyles = (container: HTMLElement) => {
+            container.style.backgroundColor = ''
+            container.style.position = ''
+            container.style.bottom = ''
+        }
+
+        const reconcile = (nav: HTMLElement) => {
+            let entry = injectionMap.get(nav)
+            if (!entry) {
+                entry = { container: getContainer(), firstSeen: Date.now(), anchored: false }
+                injectionMap.set(nav, entry)
+                console.warn('[Exporter] Tracking nav for injection', nav)
+            }
+            const { container } = entry
+
+            const chatList = nav.querySelector<HTMLElement>(':scope > div.sticky.bottom-0')
+            if (chatList) {
+                if (container.parentElement !== chatList || chatList.firstElementChild !== container) {
+                    clearFloatingStyles(container)
+                    chatList.prepend(container)
+                }
+                entry.anchored = true
+                return
+            }
+
+            // Sticky container not present yet. Wait briefly before falling back to the
+            // floating placement so a normal cold load never shows the floating state.
+            if (entry.anchored) return
+            if (container.parentElement) return
+            if (Date.now() - entry.firstSeen < FALLBACK_DELAY_MS) return
+
+            applyFloatingStyles(container)
+            nav.append(container)
+        }
+
+        sentinel.on('nav', reconcile)
 
         setInterval(() => {
-            injectionMap.forEach((container, nav) => {
+            injectionMap.forEach((entry, nav) => {
                 if (!nav.isConnected) {
-                    container.remove()
+                    entry.container.remove()
                     injectionMap.delete(nav)
                 }
             })
-            Array.from(document.querySelectorAll('nav'))
-                .filter(nav => !injectionMap.has(nav))
-                .forEach(injectNavMenu)
+            Array.from(document.querySelectorAll<HTMLElement>('nav')).forEach(reconcile)
         }, 300)
     }
 }

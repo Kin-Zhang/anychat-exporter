@@ -215,21 +215,30 @@ export class ClaudeAdapter implements PlatformAdapter {
     }
 
     private buildMessageText(msg: ClaudeMessage): string {
-        let text: string
+        let text = ''
 
         if (msg.content && Array.isArray(msg.content) && msg.content.length > 0) {
             const parts: string[] = []
             for (const block of msg.content) {
                 if (block.type === 'thinking') continue
-                if (block.type === 'tool_use') continue
                 if (block.type === 'tool_result') continue
                 if (block.type === 'text' && block.text) {
                     parts.push(block.text)
+                    continue
+                }
+                if (block.type === 'tool_use') {
+                    const rendered = this.renderToolUse(block)
+                    if (rendered) parts.push(rendered)
+                    continue
                 }
             }
             text = parts.join('\n\n')
         }
-        else {
+
+        // Fall back to msg.text whenever the structured content produced nothing.
+        // This recovers the assistant's prose when the only block was an artifact
+        // / tool_use that we couldn't render into Markdown.
+        if (!text && msg.text) {
             text = msg.text
         }
 
@@ -242,6 +251,55 @@ export class ClaudeAdapter implements PlatformAdapter {
             text += `\n\n${attachmentInfo}`
         }
         return text.trim()
+    }
+
+    private renderToolUse(block: ClaudeContentBlock): string {
+        const name = block.name ?? 'tool_use'
+        const input = (block.input ?? {}) as Record<string, unknown>
+
+        // Claude artifacts ship the user-visible payload as a tool_use block.
+        // Render the artifact body as a fenced code block so the export is not empty.
+        if (name === 'artifacts' || name === 'artifacts_v0' || name === 'create_artifact') {
+            const command = typeof input.command === 'string' ? input.command : undefined
+            if (command === 'delete') return ''
+
+            const title = typeof input.title === 'string' ? input.title : undefined
+            const language = typeof input.language === 'string'
+                ? input.language
+                : typeof input.type === 'string'
+                    ? this.languageFromArtifactType(input.type)
+                    : ''
+            const content = typeof input.content === 'string'
+                ? input.content
+                : typeof input.new_str === 'string'
+                    ? input.new_str
+                    : ''
+            if (!content) return ''
+
+            const header = title ? `**${title}**\n\n` : ''
+            const fence = '```'
+            return `${header}${fence}${language}\n${content}\n${fence}`
+        }
+
+        // Generic tool_use: keep something visible rather than silently dropping the turn.
+        try {
+            const json = JSON.stringify(input, null, 2)
+            return `\`\`\`json\n[tool_use: ${name}]\n${json}\n\`\`\``
+        }
+        catch {
+            return `[tool_use: ${name}]`
+        }
+    }
+
+    private languageFromArtifactType(type: string): string {
+        if (type.includes('html')) return 'html'
+        if (type.includes('react')) return 'jsx'
+        if (type.includes('svg')) return 'svg'
+        if (type.includes('mermaid')) return 'mermaid'
+        if (type.includes('javascript')) return 'javascript'
+        if (type.includes('python')) return 'python'
+        if (type.includes('markdown')) return 'markdown'
+        return ''
     }
 
     private resolveModelName(slug?: string | null): string {
