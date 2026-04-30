@@ -10,12 +10,15 @@ import {
     KEY_TIMESTAMP_ENABLED,
     KEY_TIMESTAMP_HTML,
     KEY_TIMESTAMP_MARKDOWN,
+    KEY_USER_CONTENT_LIMIT,
+    KEY_USER_CONTENT_LIMIT_ENABLED,
 } from '../constants'
 import { useGMStorage } from '../hooks/useGMStorage'
 import type { FC } from 'preact/compat'
 
 const defaultFormat = '{platform}-{title}'
 const defaultExportAllLimit = 1000
+const defaultUserContentLimit = 2000
 
 export interface ExportMeta {
     name: string
@@ -50,6 +53,11 @@ const SettingContext = createContext({
     copyTextIncludeAttachments: false,
     setCopyTextIncludeAttachments: (_: boolean) => {},
 
+    enableUserContentLimit: false,
+    setEnableUserContentLimit: (_: boolean) => {},
+    userContentLimit: defaultUserContentLimit,
+    setUserContentLimit: (_: number) => {},
+
     resetDefault: () => {},
 })
 
@@ -68,6 +76,9 @@ export const SettingProvider: FC = ({ children }) => {
 
     const [copyTextIncludeAttachments, setCopyTextIncludeAttachments] = useGMStorage(KEY_COPY_TEXT_INCLUDE_ATTACHMENTS, false)
 
+    const [enableUserContentLimit, setEnableUserContentLimit] = useGMStorage(KEY_USER_CONTENT_LIMIT_ENABLED, false)
+    const [userContentLimit, setUserContentLimit] = useGMStorage(KEY_USER_CONTENT_LIMIT, defaultUserContentLimit)
+
     const resetDefault = useCallback(() => {
         setFormat(defaultFormat)
         setEnableTimestamp(false)
@@ -75,6 +86,8 @@ export const SettingProvider: FC = ({ children }) => {
         setExportMetaList(defaultExportMetaList)
         setExportAllLimit(defaultExportAllLimit)
         setCopyTextIncludeAttachments(false)
+        setEnableUserContentLimit(false)
+        setUserContentLimit(defaultUserContentLimit)
     }, [
         setFormat,
         setEnableTimestamp,
@@ -82,6 +95,8 @@ export const SettingProvider: FC = ({ children }) => {
         setExportMetaList,
         setExportAllLimit,
         setCopyTextIncludeAttachments,
+        setEnableUserContentLimit,
+        setUserContentLimit,
     ])
 
     return (
@@ -109,6 +124,11 @@ export const SettingProvider: FC = ({ children }) => {
 
                 copyTextIncludeAttachments,
                 setCopyTextIncludeAttachments,
+
+                enableUserContentLimit,
+                setEnableUserContentLimit,
+                userContentLimit,
+                setUserContentLimit,
 
                 resetDefault,
             }}

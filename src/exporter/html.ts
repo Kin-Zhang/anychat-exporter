@@ -1,6 +1,6 @@
 import JSZip from 'jszip'
 import { processConversation } from '../api'
-import { KEY_TIMESTAMP_24H, KEY_TIMESTAMP_ENABLED, KEY_TIMESTAMP_HTML, baseUrl } from '../constants'
+import { KEY_TIMESTAMP_24H, KEY_TIMESTAMP_ENABLED, KEY_TIMESTAMP_HTML, KEY_USER_CONTENT_LIMIT, KEY_USER_CONTENT_LIMIT_ENABLED, baseUrl } from '../constants'
 import i18n from '../i18n'
 import { checkIfConversationStarted, fetchCurrentConversation, getPlatformName, getUserAvatar } from '../platforms/service'
 import templateHtml from '../template.html?raw'
@@ -79,6 +79,9 @@ function conversationToHtml(conversation: ConversationResult, avatar: string, me
     const enableTimestamp = ScriptStorage.get<boolean>(KEY_TIMESTAMP_ENABLED) ?? false
     const timeStampHtml = ScriptStorage.get<boolean>(KEY_TIMESTAMP_HTML) ?? false
     const timeStamp24H = ScriptStorage.get<boolean>(KEY_TIMESTAMP_24H) ?? false
+
+    const limitUserContent = ScriptStorage.get<boolean>(KEY_USER_CONTENT_LIMIT_ENABLED) ?? false
+    const userContentLimit = ScriptStorage.get<number>(KEY_USER_CONTENT_LIMIT) ?? 0
 
     const LatexRegex = /(\s\$\$.+?\$\$\s|\s\$.+?\$\s|\\\[.+?\\\]|\\\(.+?\\\))|(^\$$[\S\s]+?^\$$)|(^\$\$[\S\s]+?^\$\$\$)/gm
 
@@ -160,7 +163,16 @@ function conversationToHtml(conversation: ConversationResult, avatar: string, me
             })
         }
         if (message.author.role === 'user') {
-            postSteps = [...postSteps, input => `<p class="no-katex">${escapeHtml(input)}</p>`]
+            postSteps = [...postSteps, (input) => {
+                if (limitUserContent && userContentLimit > 0 && input.length > userContentLimit) {
+                    const head = input.slice(0, userContentLimit)
+                    const rest = input.slice(userContentLimit)
+                    return `<p class="no-katex">${escapeHtml(head)}</p>`
+                        + `<details class="user-truncated"><summary>… show ${rest.length} more characters</summary>`
+                        + `<p class="no-katex">${escapeHtml(rest)}</p></details>`
+                }
+                return `<p class="no-katex">${escapeHtml(input)}</p>`
+            }]
         }
         const postProcess = (input: string) => postSteps.reduce((acc, fn) => fn(acc), input)
         const content = transformContent(message.content, message.metadata, postProcess)

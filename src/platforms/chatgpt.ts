@@ -40,64 +40,87 @@ export class ChatGPTAdapter implements PlatformAdapter {
     }
 
     injectUI(getContainer: () => HTMLElement): void {
-        // Track the container we created for each <nav>, plus when we first saw the nav
-        // so we can defer the floating fallback until ChatGPT clearly isn't going to render
-        // the sticky bottom container.
-        interface Injection {
-            container: HTMLElement
-            firstSeen: number
-            anchored: boolean
-        }
-        const injectionMap = new Map<HTMLElement, Injection>()
-        const FALLBACK_DELAY_MS = 2000
-
-        const applyFloatingStyles = (container: HTMLElement) => {
-            container.style.backgroundColor = '#171717'
-            container.style.position = 'sticky'
-            container.style.bottom = '72px'
+        // We don't trust any single ChatGPT sidebar selector — they've changed
+        // the DOM several times. Try multiple anchors in priority order on every
+        // tick, and never fall back to a floating overlay that can sit on top
+        // of the chat list.
+        interface Slot {
+            // Where the container should currently live; recomputed each tick.
+            parent: HTMLElement
+            // Sibling to insert before (null = append).
+            before: HTMLElement | null
         }
 
-        const clearFloatingStyles = (container: HTMLElement) => {
-            container.style.backgroundColor = ''
-            container.style.position = ''
-            container.style.bottom = ''
+        const injectionMap = new Map<HTMLElement, HTMLElement>()
+
+        const findSlot = (nav: HTMLElement): Slot | null => {
+            // 1. Bottom user/profile area: prefer placing right above it so the
+            //    export button shares the sidebar footer with the account menu.
+            const profileButton = nav.querySelector<HTMLElement>(
+                'button[data-testid="profile-button"], '
+                + 'button[data-testid="accounts-profile-button"], '
+                + 'button[aria-label*="account" i], '
+                + 'button[aria-label*="profile" i]',
+            )
+            if (profileButton) {
+                // Walk up to the row container (a direct child of nav or aside)
+                // so the button isn't trapped inside the profile button itself.
+                let row: HTMLElement | null = profileButton
+                while (row && row.parentElement && row.parentElement !== nav && !row.parentElement.matches('aside, [class*="sidebar"]')) {
+                    row = row.parentElement
+                }
+                if (row?.parentElement) {
+                    return { parent: row.parentElement, before: row }
+                }
+            }
+
+            // 2. Legacy sticky bottom container.
+            const stickyBottom = nav.querySelector<HTMLElement>(':scope > div.sticky.bottom-0, :scope aside div.sticky.bottom-0')
+            if (stickyBottom) {
+                return { parent: stickyBottom, before: stickyBottom.firstElementChild as HTMLElement | null }
+            }
+
+            // 3. Any descendant with computed position: sticky in the lower half of the nav.
+            const candidates = Array.from(nav.querySelectorAll<HTMLElement>('div, aside'))
+            const navRect = nav.getBoundingClientRect()
+            for (const el of candidates) {
+                if (getComputedStyle(el).position !== 'sticky') continue
+                const rect = el.getBoundingClientRect()
+                if (rect.top >= navRect.top + navRect.height / 2) {
+                    return { parent: el, before: el.firstElementChild as HTMLElement | null }
+                }
+            }
+
+            // 4. Fallback: top of the nav, as a regular block. Never float.
+            return { parent: nav, before: nav.firstElementChild as HTMLElement | null }
         }
 
         const reconcile = (nav: HTMLElement) => {
-            let entry = injectionMap.get(nav)
-            if (!entry) {
-                entry = { container: getContainer(), firstSeen: Date.now(), anchored: false }
-                injectionMap.set(nav, entry)
+            let container = injectionMap.get(nav)
+            if (!container) {
+                container = getContainer()
+                injectionMap.set(nav, container)
                 console.warn('[Exporter] Tracking nav for injection', nav)
             }
-            const { container } = entry
 
-            const chatList = nav.querySelector<HTMLElement>(':scope > div.sticky.bottom-0')
-            if (chatList) {
-                if (container.parentElement !== chatList || chatList.firstElementChild !== container) {
-                    clearFloatingStyles(container)
-                    chatList.prepend(container)
-                }
-                entry.anchored = true
-                return
-            }
+            const slot = findSlot(nav)
+            if (!slot) return
+            // Don't reparent into our own container.
+            if (slot.parent === container || container.contains(slot.parent)) return
 
-            // Sticky container not present yet. Wait briefly before falling back to the
-            // floating placement so a normal cold load never shows the floating state.
-            if (entry.anchored) return
-            if (container.parentElement) return
-            if (Date.now() - entry.firstSeen < FALLBACK_DELAY_MS) return
+            const alreadyPlaced = container.parentElement === slot.parent
+                && container.nextElementSibling === slot.before
+            if (alreadyPlaced) return
 
-            applyFloatingStyles(container)
-            nav.append(container)
+            slot.parent.insertBefore(container, slot.before)
         }
 
         sentinel.on('nav', reconcile)
 
         setInterval(() => {
-            injectionMap.forEach((entry, nav) => {
+            injectionMap.forEach((container, nav) => {
                 if (!nav.isConnected) {
-                    entry.container.remove()
+                    container.remove()
                     injectionMap.delete(nav)
                 }
             })
