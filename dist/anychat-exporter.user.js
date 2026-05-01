@@ -1819,33 +1819,190 @@ html {
       return nodes;
     }
     extractTurnText(turn, type) {
-      var _a, _b, _c;
       if (type === "user") {
         const userContainer = turn.querySelector('[data-turn-role="User"]');
         if (userContainer) {
           const cmark2 = userContainer.querySelector(SELECTORS$1.cmarkNode);
-          if (cmark2 == null ? void 0 : cmark2.textContent) return cmark2.textContent.trim();
+          if (cmark2) return this.htmlToMarkdown(cmark2);
           const tc = userContainer.querySelector(SELECTORS$1.turnContent);
-          if ((_a = tc == null ? void 0 : tc.textContent) == null ? void 0 : _a.trim()) return tc.textContent.trim();
+          if (tc) return this.htmlToMarkdown(tc);
         }
         const cmark = turn.querySelector(SELECTORS$1.cmarkNode);
-        if (cmark == null ? void 0 : cmark.textContent) return cmark.textContent.trim();
+        if (cmark) return this.htmlToMarkdown(cmark);
         const turnContent2 = turn.querySelector(SELECTORS$1.turnContent);
-        return ((_b = turnContent2 == null ? void 0 : turnContent2.textContent) == null ? void 0 : _b.trim()) ?? "";
+        return turnContent2 ? this.htmlToMarkdown(turnContent2) : "";
       }
       const chunks = Array.from(turn.querySelectorAll(SELECTORS$1.promptChunk));
-      const texts = chunks.map((chunk) => {
-        var _a2;
-        const clone2 = chunk.cloneNode(true);
-        clone2.querySelectorAll(SELECTORS$1.thoughtChunk).forEach((el) => el.remove());
-        return ((_a2 = clone2.innerText) == null ? void 0 : _a2.trim()) ?? "";
-      }).filter((t2) => t2);
+      const texts = chunks.map((chunk) => this.htmlToMarkdown(chunk)).filter((t2) => t2);
       if (texts.length > 0) return texts.join("\n\n");
       const turnContent = turn.querySelector(SELECTORS$1.turnContent);
-      if (!turnContent) return "";
-      const clone = turnContent.cloneNode(true);
-      clone.querySelectorAll(SELECTORS$1.thoughtChunk).forEach((el) => el.remove());
-      return ((_c = clone.textContent) == null ? void 0 : _c.trim()) ?? "";
+      return turnContent ? this.htmlToMarkdown(turnContent) : "";
+    }
+    // Convert AI Studio's rendered Angular DOM into Markdown.
+    //
+    // The previous implementation used `textContent` / `innerText`, which:
+    //   - lost paragraph, heading, list, and code-block structure
+    //   - duplicated every KaTeX expression because KaTeX renders both a
+    //     hidden <span class="katex-mathml"> (with the LaTeX source inside
+    //     <annotation>) and a visible <span class="katex-html"> (with the
+    //     rendered glyphs); textContent concatenates both.
+    //
+    // We walk the DOM ourselves and emit Markdown, treating <ms-cmark-node>
+    // as a transparent wrapper, pulling LaTeX out of <annotation>, and
+    // emitting fenced blocks for <ms-code-block>.
+    htmlToMarkdown(root2) {
+      function renderChildren(el, ctx) {
+        let out2 = "";
+        for (const child of Array.from(el.childNodes)) out2 += render(child, ctx);
+        return out2;
+      }
+      function render(node2, ctx) {
+        var _a, _b, _c, _d;
+        if (node2.nodeType === Node.TEXT_NODE) return node2.textContent ?? "";
+        if (node2.nodeType !== Node.ELEMENT_NODE) return "";
+        const el = node2;
+        const tag = el.tagName;
+        if (tag === "MS-THOUGHT-CHUNK") return "";
+        if (tag === "MS-KATEX") {
+          const tex = ((_b = (_a = el.querySelector('annotation[encoding="application/x-tex"]')) == null ? void 0 : _a.textContent) == null ? void 0 : _b.trim()) ?? "";
+          if (!tex) return "";
+          const isInline = el.classList.contains("inline") || el.querySelector(".katex-display") === null;
+          return isInline ? `$${tex}$` : `
+
+$$${tex}$$
+
+`;
+        }
+        if (tag === "MS-CODE-BLOCK") {
+          const lang = el.getAttribute("data-test-language") ?? "";
+          const code2 = ((_c = el.querySelector("pre code")) == null ? void 0 : _c.textContent) ?? ((_d = el.querySelector("pre")) == null ? void 0 : _d.textContent) ?? "";
+          return `
+
+\`\`\`${lang}
+${code2.replace(/\n+$/, "")}
+\`\`\`
+
+`;
+        }
+        if (tag === "SPAN" && el.classList.contains("inline-code")) {
+          return `\`${el.textContent ?? ""}\``;
+        }
+        if (tag === "MS-CMARK-NODE" || tag === "MS-TEXT-CHUNK" || tag === "MS-PROMPT-CHUNK" || tag === "SPAN") {
+          return renderChildren(el, ctx);
+        }
+        switch (tag) {
+          case "P":
+            return `
+
+${renderChildren(el, ctx).trim()}
+
+`;
+          case "BR":
+            return "\n";
+          case "STRONG":
+          case "B":
+            return `**${renderChildren(el, ctx)}**`;
+          case "EM":
+          case "I":
+            return `*${renderChildren(el, ctx)}*`;
+          case "CODE":
+            return `\`${el.textContent ?? ""}\``;
+          case "A": {
+            const href = el.getAttribute("href") ?? "";
+            const text2 = renderChildren(el, ctx);
+            return href ? `[${text2}](${href})` : text2;
+          }
+          case "H1":
+            return `
+
+# ${renderChildren(el, ctx).trim()}
+
+`;
+          case "H2":
+            return `
+
+## ${renderChildren(el, ctx).trim()}
+
+`;
+          case "H3":
+            return `
+
+### ${renderChildren(el, ctx).trim()}
+
+`;
+          case "H4":
+            return `
+
+#### ${renderChildren(el, ctx).trim()}
+
+`;
+          case "H5":
+            return `
+
+##### ${renderChildren(el, ctx).trim()}
+
+`;
+          case "H6":
+            return `
+
+###### ${renderChildren(el, ctx).trim()}
+
+`;
+          case "HR":
+            return "\n\n---\n\n";
+          case "BLOCKQUOTE": {
+            const inner = renderChildren(el, ctx).trim();
+            if (!inner) return "";
+            const quoted = inner.split("\n").map((l2) => l2 ? `> ${l2}` : ">").join("\n");
+            return `
+
+${quoted}
+
+`;
+          }
+          case "UL":
+          case "OL": {
+            const ordered = tag === "OL";
+            ctx.listStack.push({ ordered, index: 0 });
+            const items = [];
+            for (const child of Array.from(el.children)) {
+              if (child.tagName !== "LI") continue;
+              const frame = ctx.listStack[ctx.listStack.length - 1];
+              frame.index += 1;
+              const indent2 = "  ".repeat(ctx.listStack.length - 1);
+              const prefix = ordered ? `${frame.index}. ` : "- ";
+              const inner = renderChildren(child, ctx).trim();
+              const lines = inner.split("\n");
+              const first = lines.shift() ?? "";
+              const rest = lines.map((l2) => l2 ? `${indent2}  ${l2}` : "").join("\n");
+              items.push(`${indent2}${prefix}${first}${rest ? `
+${rest}` : ""}`);
+            }
+            ctx.listStack.pop();
+            return `
+
+${items.join("\n")}
+
+`;
+          }
+          case "LI":
+            return renderChildren(el, ctx);
+          case "PRE": {
+            const code2 = el.textContent ?? "";
+            return `
+
+\`\`\`
+${code2.replace(/\n+$/, "")}
+\`\`\`
+
+`;
+          }
+          default:
+            return renderChildren(el, ctx);
+        }
+      }
+      const out = render(root2, { listStack: [] });
+      return out.replace(/\n{3,}/g, "\n\n").trim();
     }
   }
   class ChatGPTAdapter {
@@ -3107,7 +3264,7 @@ ${json}
     "ul"
   ];
   const $8927f6f2acc4f386$export$250ffa63cdc0d034 = $8927f6f2acc4f386$var$NODES.reduce((primitive, node2) => {
-    const Node = /* @__PURE__ */ k$1((props, forwardedRef) => {
+    const Node2 = /* @__PURE__ */ k$1((props, forwardedRef) => {
       const { asChild, ...primitiveProps } = props;
       const Comp = asChild ? $5e63c961fc1ce211$export$8c6ed5c666ac1360 : node2;
       p$6(() => {
@@ -3117,10 +3274,10 @@ ${json}
         ref: forwardedRef
       }));
     });
-    Node.displayName = `Primitive.${node2}`;
+    Node2.displayName = `Primitive.${node2}`;
     return {
       ...primitive,
-      [node2]: Node
+      [node2]: Node2
     };
   }, {});
   function $8927f6f2acc4f386$export$6d1a0317bde7de7f(target, event) {

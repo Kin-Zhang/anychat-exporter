@@ -217,35 +217,159 @@ export class AIStudioAdapter implements PlatformAdapter {
             const userContainer = turn.querySelector('[data-turn-role="User"]')
             if (userContainer) {
                 const cmark = userContainer.querySelector(SELECTORS.cmarkNode)
-                if (cmark?.textContent) return cmark.textContent.trim()
+                if (cmark) return this.htmlToMarkdown(cmark)
                 const tc = userContainer.querySelector(SELECTORS.turnContent)
-                if (tc?.textContent?.trim()) return tc.textContent.trim()
+                if (tc) return this.htmlToMarkdown(tc)
             }
             // Fallback: any ms-cmark-node or .turn-content in the turn element
             const cmark = turn.querySelector(SELECTORS.cmarkNode)
-            if (cmark?.textContent) return cmark.textContent.trim()
+            if (cmark) return this.htmlToMarkdown(cmark)
             const turnContent = turn.querySelector(SELECTORS.turnContent)
-            return turnContent?.textContent?.trim() ?? ''
+            return turnContent ? this.htmlToMarkdown(turnContent) : ''
         }
 
         // Model: collect from prompt chunks, stripping thought chunk content from each
         const chunks = Array.from(turn.querySelectorAll(SELECTORS.promptChunk))
         const texts = chunks
-            .map((chunk) => {
-                // Clone and remove thought content so only the response text remains
-                const clone = chunk.cloneNode(true) as Element
-                clone.querySelectorAll(SELECTORS.thoughtChunk).forEach(el => el.remove())
-                return (clone as HTMLElement).innerText?.trim() ?? ''
-            })
+            .map(chunk => this.htmlToMarkdown(chunk))
             .filter(t => t)
 
         if (texts.length > 0) return texts.join('\n\n')
 
-        // Fallback: clone turn content and strip thought chunks before extracting
+        // Fallback: turn content with thought chunks stripped
         const turnContent = turn.querySelector(SELECTORS.turnContent)
-        if (!turnContent) return ''
-        const clone = turnContent.cloneNode(true) as Element
-        clone.querySelectorAll(SELECTORS.thoughtChunk).forEach(el => el.remove())
-        return clone.textContent?.trim() ?? ''
+        return turnContent ? this.htmlToMarkdown(turnContent) : ''
+    }
+
+    // Convert AI Studio's rendered Angular DOM into Markdown.
+    //
+    // The previous implementation used `textContent` / `innerText`, which:
+    //   - lost paragraph, heading, list, and code-block structure
+    //   - duplicated every KaTeX expression because KaTeX renders both a
+    //     hidden <span class="katex-mathml"> (with the LaTeX source inside
+    //     <annotation>) and a visible <span class="katex-html"> (with the
+    //     rendered glyphs); textContent concatenates both.
+    //
+    // We walk the DOM ourselves and emit Markdown, treating <ms-cmark-node>
+    // as a transparent wrapper, pulling LaTeX out of <annotation>, and
+    // emitting fenced blocks for <ms-code-block>.
+    private htmlToMarkdown(root: Element): string {
+        interface Ctx { listStack: { ordered: boolean; index: number }[] }
+
+        function renderChildren(el: Node, ctx: Ctx): string {
+            let out = ''
+            for (const child of Array.from(el.childNodes)) out += render(child, ctx)
+            return out
+        }
+
+        function render(node: Node, ctx: Ctx): string {
+            if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ''
+            if (node.nodeType !== Node.ELEMENT_NODE) return ''
+            const el = node as Element
+            const tag = el.tagName
+
+            // Skip the model's internal "thinking" content.
+            if (tag === 'MS-THOUGHT-CHUNK') return ''
+
+            // KaTeX: extract the LaTeX source from the MathML annotation.
+            // Wrap inline expressions in $...$ and display ones in $$...$$.
+            if (tag === 'MS-KATEX') {
+                const tex = el.querySelector('annotation[encoding="application/x-tex"]')
+                    ?.textContent?.trim() ?? ''
+                if (!tex) return ''
+                const isInline = el.classList.contains('inline')
+                    || el.querySelector('.katex-display') === null
+                return isInline ? `$${tex}$` : `\n\n$$${tex}$$\n\n`
+            }
+
+            // Fenced code blocks (LaTeX, Python, etc.)
+            if (tag === 'MS-CODE-BLOCK') {
+                const lang = el.getAttribute('data-test-language') ?? ''
+                const code = el.querySelector('pre code')?.textContent
+                    ?? el.querySelector('pre')?.textContent
+                    ?? ''
+                return `\n\n\`\`\`${lang}\n${code.replace(/\n+$/, '')}\n\`\`\`\n\n`
+            }
+
+            // Inline code spans rendered by Angular cmark.
+            if (tag === 'SPAN' && el.classList.contains('inline-code')) {
+                return `\`${el.textContent ?? ''}\``
+            }
+
+            // Transparent wrappers Angular inserts around real content.
+            if (
+                tag === 'MS-CMARK-NODE'
+                || tag === 'MS-TEXT-CHUNK'
+                || tag === 'MS-PROMPT-CHUNK'
+                || tag === 'SPAN'
+            ) {
+                return renderChildren(el, ctx)
+            }
+
+            switch (tag) {
+                case 'P':
+                    return `\n\n${renderChildren(el, ctx).trim()}\n\n`
+                case 'BR':
+                    return '\n'
+                case 'STRONG':
+                case 'B':
+                    return `**${renderChildren(el, ctx)}**`
+                case 'EM':
+                case 'I':
+                    return `*${renderChildren(el, ctx)}*`
+                case 'CODE':
+                    return `\`${el.textContent ?? ''}\``
+                case 'A': {
+                    const href = el.getAttribute('href') ?? ''
+                    const text = renderChildren(el, ctx)
+                    return href ? `[${text}](${href})` : text
+                }
+                case 'H1': return `\n\n# ${renderChildren(el, ctx).trim()}\n\n`
+                case 'H2': return `\n\n## ${renderChildren(el, ctx).trim()}\n\n`
+                case 'H3': return `\n\n### ${renderChildren(el, ctx).trim()}\n\n`
+                case 'H4': return `\n\n#### ${renderChildren(el, ctx).trim()}\n\n`
+                case 'H5': return `\n\n##### ${renderChildren(el, ctx).trim()}\n\n`
+                case 'H6': return `\n\n###### ${renderChildren(el, ctx).trim()}\n\n`
+                case 'HR': return '\n\n---\n\n'
+                case 'BLOCKQUOTE': {
+                    const inner = renderChildren(el, ctx).trim()
+                    if (!inner) return ''
+                    const quoted = inner.split('\n').map(l => l ? `> ${l}` : '>').join('\n')
+                    return `\n\n${quoted}\n\n`
+                }
+                case 'UL':
+                case 'OL': {
+                    const ordered = tag === 'OL'
+                    ctx.listStack.push({ ordered, index: 0 })
+                    const items: string[] = []
+                    for (const child of Array.from(el.children)) {
+                        if (child.tagName !== 'LI') continue
+                        const frame = ctx.listStack[ctx.listStack.length - 1]
+                        frame.index += 1
+                        const indent = '  '.repeat(ctx.listStack.length - 1)
+                        const prefix = ordered ? `${frame.index}. ` : '- '
+                        const inner = renderChildren(child, ctx).trim()
+                        const lines = inner.split('\n')
+                        const first = lines.shift() ?? ''
+                        const rest = lines.map(l => l ? `${indent}  ${l}` : '').join('\n')
+                        items.push(`${indent}${prefix}${first}${rest ? `\n${rest}` : ''}`)
+                    }
+                    ctx.listStack.pop()
+                    return `\n\n${items.join('\n')}\n\n`
+                }
+                case 'LI':
+                    return renderChildren(el, ctx)
+                case 'PRE': {
+                    const code = el.textContent ?? ''
+                    return `\n\n\`\`\`\n${code.replace(/\n+$/, '')}\n\`\`\`\n\n`
+                }
+                default:
+                    return renderChildren(el, ctx)
+            }
+        }
+
+        const out = render(root, { listStack: [] })
+        // Collapse runs of 3+ newlines to exactly 2.
+        return out.replace(/\n{3,}/g, '\n\n').trim()
     }
 }
