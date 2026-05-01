@@ -1873,68 +1873,39 @@ html {
       return getUserAvatar$1();
     }
     injectUI(getContainer) {
-      const EXPORTER_MARK = "data-anychat-exporter";
-      const injectionMap = /* @__PURE__ */ new Map();
-      const isVisible = (el) => {
-        if (!el.isConnected) return false;
-        const rect = el.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0;
-      };
-      const findSidebarRoot = (nav) => {
-        const aside = nav.querySelector(":scope > aside");
-        if (aside) return aside;
-        const onlyChild = nav.children.length === 1 ? nav.firstElementChild : null;
-        if (onlyChild && onlyChild.children.length >= 2) return onlyChild;
-        return nav;
-      };
-      const findFooterRow = (root2, container) => {
-        for (let i2 = root2.children.length - 1; i2 >= 0; i2--) {
-          const el = root2.children[i2];
-          if (el === container) continue;
-          if (el.contains(container)) continue;
-          if (!isVisible(el)) continue;
-          return el;
+      let container = null;
+      const findProfileContainer = () => {
+        const candidates = Array.from(document.querySelectorAll(
+          '[data-testid="accounts-profile-button"], [data-testid="profile-button"]'
+        ));
+        for (const btn of candidates) {
+          const rect = btn.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) continue;
+          let el = btn;
+          while (el && el.parentElement) {
+            const prev = el.previousElementSibling;
+            if (prev && prev.tagName === "NAV") return el;
+            el = el.parentElement;
+          }
         }
         return null;
       };
-      const findSlot = (nav, container) => {
-        const root2 = findSidebarRoot(nav);
-        const footer2 = findFooterRow(root2, container);
-        if (footer2) {
-          return { parent: root2, before: footer2 };
-        }
-        return null;
-      };
-      const reconcile = (nav) => {
-        let container = injectionMap.get(nav);
-        if (!container) {
-          container = getContainer();
-          container.setAttribute(EXPORTER_MARK, "");
-          injectionMap.set(nav, container);
-        }
-        const slot = findSlot(nav, container);
-        if (!slot) {
+      const reconcile = () => {
+        const profileContainer = findProfileContainer();
+        if (!profileContainer || !profileContainer.parentElement) {
           return;
         }
-        if (slot.parent === container || container.contains(slot.parent)) return;
-        const alreadyPlaced = container.parentElement === slot.parent && container.nextElementSibling === slot.before;
+        const parent = profileContainer.parentElement;
+        if (!container || !container.isConnected) {
+          container = getContainer();
+          container.setAttribute("data-anychat-exporter", "");
+        }
+        const alreadyPlaced = container.parentElement === parent && container.nextElementSibling === profileContainer;
         if (alreadyPlaced) return;
-        slot.parent.insertBefore(container, slot.before);
+        parent.insertBefore(container, profileContainer);
       };
       sentinel.on("nav", reconcile);
-      const isSidebarNav = (nav) => {
-        const rect = nav.getBoundingClientRect();
-        return rect.height >= Math.min(400, window.innerHeight * 0.5);
-      };
-      setInterval(() => {
-        injectionMap.forEach((container, nav) => {
-          if (!nav.isConnected) {
-            container.remove();
-            injectionMap.delete(nav);
-          }
-        });
-        Array.from(document.querySelectorAll("nav")).filter(isSidebarNav).forEach(reconcile);
-      }, 300);
+      setInterval(reconcile, 300);
     }
   }
   const defaultAvatar$1 = "data:image/svg+xml,%3Csvg%20stroke%3D%22currentColor%22%20fill%3D%22none%22%20stroke-width%3D%221.5%22%20viewBox%3D%22-6%20-6%2036%2036%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20style%3D%22color%3A%20white%3B%20background%3A%20%23ab68ff%3B%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M20%2021v-2a4%204%200%200%200-4-4H8a4%204%200%200%200-4%204v2%22%3E%3C%2Fpath%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%227%22%20r%3D%224%22%3E%3C%2Fcircle%3E%3C%2Fsvg%3E";
