@@ -1874,35 +1874,55 @@ html {
     }
     injectUI(getContainer) {
       let container = null;
-      const findProfileContainer = () => {
-        const candidates = Array.from(document.querySelectorAll(
-          '[data-testid="accounts-profile-button"], [data-testid="profile-button"]'
-        ));
-        for (const btn of candidates) {
-          const rect = btn.getBoundingClientRect();
-          if (rect.width === 0 || rect.height === 0) continue;
-          let el = btn;
-          while (el && el.parentElement) {
-            const prev = el.previousElementSibling;
-            if (prev && prev.tagName === "NAV") return el;
-            el = el.parentElement;
+      const skipOurs = (el, dir) => {
+        var _a;
+        while (el && ((_a = el.matches) == null ? void 0 : _a.call(el, "[data-anychat-exporter]"))) {
+          el = el.nextElementSibling;
+        }
+        return el;
+      };
+      const isInteractive = (el) => {
+        if (el.hasAttribute("inert")) return false;
+        const styles = getComputedStyle(el);
+        if (Number.parseFloat(styles.opacity) < 0.5) return false;
+        if (styles.visibility === "hidden" || styles.display === "none") return false;
+        return true;
+      };
+      const isVisible = (el) => {
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      };
+      const findChatNav = () => {
+        const navs = Array.from(document.querySelectorAll("nav"));
+        let best = null;
+        for (const nav of navs) {
+          if (!isInteractive(nav)) continue;
+          const navRect = nav.getBoundingClientRect();
+          if (navRect.height < 200) continue;
+          const sibling = skipOurs(nav.nextElementSibling);
+          if (!sibling) continue;
+          const profileBtn = sibling.querySelector(
+            '[data-testid="accounts-profile-button"], [data-testid="profile-button"]'
+          );
+          if (!profileBtn || !isVisible(profileBtn)) continue;
+          if (!best || navRect.height > best.height) {
+            best = { nav, height: navRect.height };
           }
         }
-        return null;
+        return (best == null ? void 0 : best.nav) ?? null;
       };
       const reconcile = () => {
-        const profileContainer = findProfileContainer();
-        if (!profileContainer || !profileContainer.parentElement) {
+        const chatNav = findChatNav();
+        if (!(chatNav == null ? void 0 : chatNav.parentElement)) {
           return;
         }
-        const parent = profileContainer.parentElement;
         if (!container || !container.isConnected) {
           container = getContainer();
           container.setAttribute("data-anychat-exporter", "");
         }
-        const alreadyPlaced = container.parentElement === parent && container.nextElementSibling === profileContainer;
-        if (alreadyPlaced) return;
-        parent.insertBefore(container, profileContainer);
+        const correctlyPlaced = container.parentElement === chatNav.parentElement && container.previousElementSibling === chatNav;
+        if (correctlyPlaced) return;
+        chatNav.insertAdjacentElement("afterend", container);
       };
       sentinel.on("nav", reconcile);
       setInterval(reconcile, 300);

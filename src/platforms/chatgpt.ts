@@ -42,57 +42,83 @@ export class ChatGPTAdapter implements PlatformAdapter {
     injectUI(getContainer: () => HTMLElement): void {
         // Layout (current ChatGPT, late 2025):
         //   <div sidebar-wrapper>
-        //     <nav aria-label="Chat history">  ← chat list, projects, recents, …
-        //     <div>                            ← profile/account block at bottom
-        //       <div data-testid="accounts-profile-button">…</div>
-        //     </div>
-        //   </div>
-        // We want the export button as a SIBLING of the nav, sitting immediately
-        // before the profile container — i.e. docked above the user/Plus block,
-        // below the chat history.
+        //     <nav id="stage-sidebar-tiny-bar" inert opacity-0>   ← collapsed-rail copy
+        //     <div opacity-100>                                    ← expanded sidebar
+        //       <h2>Chat history</h2>
+        //       <div flex-col>
+        //         <nav aria-label="Chat history">                  ← chat list
+        //         <div bg-sidebar-surface-primary>                 ← profile/account block
+        //           <button data-testid="accounts-profile-button">
+        //
+        // Goal: dock our container as the immediate next sibling of the visible
+        // chat-history <nav>, i.e. just above the profile container. The tiny-
+        // bar nav has its own profile button so we must NOT match against it.
+        //
+        // Pitfall: once we insert ourselves, the profile container's
+        // previousElementSibling becomes our own div, not the nav. Any matching
+        // logic must therefore skip elements marked data-anychat-exporter.
         let container: HTMLElement | null = null
 
-        const findProfileContainer = (): HTMLElement | null => {
-            // The account button might be either the inner div or a sibling tiny-bar
-            // copy. Pick the one that's actually visible and inside the sidebar
-            // wrapper (a flex column whose first major child is the chat-history nav).
-            const candidates = Array.from(document.querySelectorAll<HTMLElement>(
-                '[data-testid="accounts-profile-button"], [data-testid="profile-button"]',
-            ))
-            for (const btn of candidates) {
-                const rect = btn.getBoundingClientRect()
-                if (rect.width === 0 || rect.height === 0) continue
-                // Walk up: the profile container is the ancestor of the button
-                // whose previous sibling is the chat-history <nav>.
-                let el: HTMLElement | null = btn
-                while (el && el.parentElement) {
-                    const prev = el.previousElementSibling
-                    if (prev && prev.tagName === 'NAV') return el
-                    el = el.parentElement
+        const skipOurs = (el: Element | null, dir: 'prev' | 'next'): Element | null => {
+            while (el && (el as HTMLElement).matches?.('[data-anychat-exporter]')) {
+                el = dir === 'prev' ? el.previousElementSibling : el.nextElementSibling
+            }
+            return el
+        }
+
+        const isInteractive = (el: HTMLElement) => {
+            if (el.hasAttribute('inert')) return false
+            const styles = getComputedStyle(el)
+            if (Number.parseFloat(styles.opacity) < 0.5) return false
+            if (styles.visibility === 'hidden' || styles.display === 'none') return false
+            return true
+        }
+
+        const isVisible = (el: HTMLElement) => {
+            const rect = el.getBoundingClientRect()
+            return rect.width > 0 && rect.height > 0
+        }
+
+        // Find the chat-history nav: a tall, interactive <nav> whose immediate
+        // (non-ours) next sibling contains a visible profile button.
+        const findChatNav = (): HTMLElement | null => {
+            const navs = Array.from(document.querySelectorAll<HTMLElement>('nav'))
+            let best: { nav: HTMLElement; height: number } | null = null
+            for (const nav of navs) {
+                if (!isInteractive(nav)) continue
+                const navRect = nav.getBoundingClientRect()
+                if (navRect.height < 200) continue
+                const sibling = skipOurs(nav.nextElementSibling, 'next') as HTMLElement | null
+                if (!sibling) continue
+                const profileBtn = sibling.querySelector<HTMLElement>(
+                    '[data-testid="accounts-profile-button"], [data-testid="profile-button"]',
+                )
+                if (!profileBtn || !isVisible(profileBtn)) continue
+                if (!best || navRect.height > best.height) {
+                    best = { nav, height: navRect.height }
                 }
             }
-            return null
+            return best?.nav ?? null
         }
 
         const reconcile = () => {
-            const profileContainer = findProfileContainer()
-            if (!profileContainer || !profileContainer.parentElement) {
-                // Sidebar (or profile area) not mounted yet. Wait for the next
-                // tick rather than dropping the button somewhere wrong.
+            const chatNav = findChatNav()
+            if (!chatNav?.parentElement) {
+                // Sidebar isn't in the right state yet (collapsed, loading, etc).
+                // Wait for the next tick rather than dropping the button somewhere wrong.
                 return
             }
-            const parent = profileContainer.parentElement
 
             if (!container || !container.isConnected) {
                 container = getContainer()
                 container.setAttribute('data-anychat-exporter', '')
             }
 
-            const alreadyPlaced = container.parentElement === parent
-                && container.nextElementSibling === profileContainer
-            if (alreadyPlaced) return
+            const correctlyPlaced = container.parentElement === chatNav.parentElement
+                && container.previousElementSibling === chatNav
+            if (correctlyPlaced) return
 
-            parent.insertBefore(container, profileContainer)
+            chatNav.insertAdjacentElement('afterend', container)
         }
 
         sentinel.on('nav', reconcile)
