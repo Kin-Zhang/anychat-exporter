@@ -25623,10 +25623,14 @@ ${content2}`;
                         transition-opacity duration-200 shadow-md
                         ${isMobile ? "gap-x-1 px-1.5 pt-2 rounded animate-slideUp" : "gap-x-1 px-1.5 py-2 pb-0 rounded-md animate-fadeIn"}`,
                     style: {
-                      width: isMobile ? 316 : 268,
-                      left: -6,
-                      bottom: 0,
-                      zIndex: 9999
+                      "width": isMobile ? 316 : 268,
+                      "left": -6,
+                      "bottom": 0,
+                      // Stay below the Dialog overlay (z-index 1000) when a sub-dialog is open
+                      // so the export menu doesn't float on top of Settings / Export-All / JSON.
+                      "zIndex": settingOpen || jsonOpen || exportOpen ? 999 : 9999,
+                      "opacity": settingOpen || jsonOpen || exportOpen ? 0 : void 0,
+                      "pointer-events": settingOpen || jsonOpen || exportOpen ? "none" : void 0
                     },
                     sideOffset: isMobile ? 0 : 8,
                     side: isMobile ? "bottom" : "right",
