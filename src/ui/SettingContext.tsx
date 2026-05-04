@@ -10,12 +10,14 @@ import {
     KEY_TIMESTAMP_ENABLED,
     KEY_TIMESTAMP_HTML,
     KEY_TIMESTAMP_MARKDOWN,
+    KEY_USER_CONTENT_LIMIT,
 } from '../constants'
 import { useGMStorage } from '../hooks/useGMStorage'
 import type { FC } from 'preact/compat'
 
 const defaultFormat = '{platform}-{title}'
 const defaultExportAllLimit = 1000
+const defaultUserContentLimit = 0 // 0 = no limit
 
 export interface ExportMeta {
     name: string
@@ -50,6 +52,9 @@ const SettingContext = createContext({
     copyTextIncludeAttachments: false,
     setCopyTextIncludeAttachments: (_: boolean) => {},
 
+    userContentLimit: defaultUserContentLimit,
+    setUserContentLimit: (_: number) => {},
+
     resetDefault: () => {},
 })
 
@@ -68,6 +73,8 @@ export const SettingProvider: FC = ({ children }) => {
 
     const [copyTextIncludeAttachments, setCopyTextIncludeAttachments] = useGMStorage(KEY_COPY_TEXT_INCLUDE_ATTACHMENTS, false)
 
+    const [userContentLimit, setUserContentLimit] = useGMStorage(KEY_USER_CONTENT_LIMIT, defaultUserContentLimit)
+
     const resetDefault = useCallback(() => {
         setFormat(defaultFormat)
         setEnableTimestamp(false)
@@ -75,6 +82,7 @@ export const SettingProvider: FC = ({ children }) => {
         setExportMetaList(defaultExportMetaList)
         setExportAllLimit(defaultExportAllLimit)
         setCopyTextIncludeAttachments(false)
+        setUserContentLimit(defaultUserContentLimit)
     }, [
         setFormat,
         setEnableTimestamp,
@@ -82,6 +90,7 @@ export const SettingProvider: FC = ({ children }) => {
         setExportMetaList,
         setExportAllLimit,
         setCopyTextIncludeAttachments,
+        setUserContentLimit,
     ])
 
     return (
@@ -109,6 +118,9 @@ export const SettingProvider: FC = ({ children }) => {
 
                 copyTextIncludeAttachments,
                 setCopyTextIncludeAttachments,
+
+                userContentLimit,
+                setUserContentLimit,
 
                 resetDefault,
             }}

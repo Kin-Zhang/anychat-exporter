@@ -48,5 +48,9 @@
   "Last 100": "最新 100 条",
   "No results": "无结果",
   "Copy Text Attachments": "复制文本含附件",
-  "Copy Text Attachments Description": "复制文本时是否包含附件内容（如上传文件的提取文本）。"
+  "Copy Text Attachments Description": "复制文本时是否包含附件内容（如上传文件的提取文本）。",
+  "User Content Limit": "用户内容字数限制",
+  "User Content Limit Description": "导出时按字符数限制每条用户消息长度。0 表示不限制。Markdown 会直接截断，HTML 会把超出部分放进可折叠的 <details> 块。",
+  "characters": "字符",
+  "No limit (0 = unlimited)": "无限制（0 表示不限制）"
 }

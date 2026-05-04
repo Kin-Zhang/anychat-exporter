@@ -39,6 +39,7 @@ export const SettingDialog: FC<SettingDialogProps> = ({
         exportMetaList, setExportMetaList,
         exportAllLimit, setExportAllLimit,
         copyTextIncludeAttachments, setCopyTextIncludeAttachments,
+        userContentLimit, setUserContentLimit,
         /* eslint-enable pionxzh/consistent-list-newline */
     } = useSettingContext()
     const { t, i18n } = useTranslation()
@@ -148,6 +149,38 @@ export const SettingDialog: FC<SettingDialogProps> = ({
                                             />
                                             <span className="font-medium text-gray-900 dark:text-gray-300 w-12 text-right">
                                                 {exportAllLimit}
+                                            </span>
+                                        </div>
+                                    </dd>
+                                </div>
+                            </div>
+                            <div className="relative flex bg-white dark:bg-white/5 rounded p-4">
+                                <div>
+                                    <dt className="text-md font-medium text-gray-800 dark:text-white">
+                                        {t('User Content Limit')}
+                                    </dt>
+                                    <dd className="text-sm text-gray-700 dark:text-gray-300">
+                                        {t('User Content Limit Description')}
+                                        <div className="flex items-center gap-4 mt-3">
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                step={100}
+                                                value={userContentLimit}
+                                                onChange={e =>
+                                                    setUserContentLimit(
+                                                        Math.max(
+                                                            0,
+                                                            Number.parseInt(e.currentTarget.value, 10) || 0,
+                                                        ),
+                                                    )}
+                                                className="Input w-32"
+                                                id="userContentLimit"
+                                            />
+                                            <span className="text-sm text-gray-700 dark:text-gray-300">
+                                                {userContentLimit === 0
+                                                    ? t('No limit (0 = unlimited)')
+                                                    : t('characters')}
                                             </span>
                                         </div>
                                     </dd>

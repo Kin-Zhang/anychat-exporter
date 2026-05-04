@@ -1,8 +1,8 @@
 import JSZip from 'jszip'
 import { processConversation } from '../api'
-import { KEY_TIMESTAMP_24H, KEY_TIMESTAMP_ENABLED, KEY_TIMESTAMP_HTML, baseUrl } from '../constants'
+import { KEY_TIMESTAMP_24H, KEY_TIMESTAMP_ENABLED, KEY_TIMESTAMP_HTML, KEY_USER_CONTENT_LIMIT, baseUrl } from '../constants'
 import i18n from '../i18n'
-import { checkIfConversationStarted, fetchCurrentConversation, getUserAvatar } from '../platforms/service'
+import { checkIfConversationStarted, fetchCurrentConversation, getPlatformName, getUserAvatar } from '../platforms/service'
 import templateHtml from '../template.html?raw'
 import { buildZipFileName, downloadFile, getFileNameWithFormat } from '../utils/download'
 import { fromMarkdown, toHtml } from '../utils/markdown'
@@ -11,6 +11,13 @@ import { standardizeLineBreaks } from '../utils/text'
 import { dateStr, getColorScheme, timestamp, unixTimestampToISOString } from '../utils/utils'
 import type { ApiConversationWithId, ConversationNodeMessage, ConversationResult } from '../api'
 import type { ExportMeta } from '../ui/SettingContext'
+
+const ICON_BY_PLATFORM: Record<string, string> = {
+    chatgpt: 'chatgpt',
+    claude: 'claude',
+    gemini: 'gemini',
+    aistudio: 'aistudio',
+}
 
 export async function exportToHtml(fileNameFormat: string, metaList: ExportMeta[]) {
     if (!checkIfConversationStarted()) {
@@ -73,6 +80,8 @@ function conversationToHtml(conversation: ConversationResult, avatar: string, me
     const timeStampHtml = ScriptStorage.get<boolean>(KEY_TIMESTAMP_HTML) ?? false
     const timeStamp24H = ScriptStorage.get<boolean>(KEY_TIMESTAMP_24H) ?? false
 
+    const userContentLimit = ScriptStorage.get<number>(KEY_USER_CONTENT_LIMIT) ?? 0
+
     const LatexRegex = /(\s\$\$.+?\$\$\s|\s\$.+?\$\s|\\\[.+?\\\]|\\\(.+?\\\))|(^\$$[\S\s]+?^\$$)|(^\$\$[\S\s]+?^\$\$\$)/gm
 
     const conversationHtml = conversationNodes.map(({ message }) => {
@@ -104,14 +113,15 @@ function conversationToHtml(conversation: ConversationResult, avatar: string, me
             }
         }
 
-        // Determine CSS class for avatar background (template only has GPT-3/GPT-4 styles)
-        const authorSlug = message?.metadata?.model_slug ?? ''
-        const authorCssClass = authorSlug.startsWith('gpt-3') ? 'GPT-3' : 'GPT-4'
+        // Pick the assistant avatar based on the active platform so each export
+        // shows the correct brand mark instead of always the ChatGPT logo.
+        const platformKey = getPlatformName().toLowerCase()
+        const iconId = ICON_BY_PLATFORM[platformKey] ?? 'chatgpt'
         const author = transformAuthor(message.author, model)
-        const authorType = message.author.role === 'user' ? 'user' : authorCssClass
+        const authorType = message.author.role === 'user' ? 'user' : platformKey
         const avatarEl = message.author.role === 'user'
             ? `<img alt="${author}" />`
-            : '<svg width="41" height="41"><use xlink:href="#chatgpt" /></svg>'
+            : `<svg width="41" height="41"><use xlink:href="#${iconId}" /></svg>`
 
         let postSteps: Array<(input: string) => string> = []
         if (message.author.role === 'assistant') {
@@ -152,7 +162,16 @@ function conversationToHtml(conversation: ConversationResult, avatar: string, me
             })
         }
         if (message.author.role === 'user') {
-            postSteps = [...postSteps, input => `<p class="no-katex">${escapeHtml(input)}</p>`]
+            postSteps = [...postSteps, (input) => {
+                if (userContentLimit > 0 && input.length > userContentLimit) {
+                    const head = input.slice(0, userContentLimit)
+                    const rest = input.slice(userContentLimit)
+                    return `<p class="no-katex">${escapeHtml(head)}</p>`
+                        + `<details class="user-truncated"><summary>… show ${rest.length} more characters</summary>`
+                        + `<p class="no-katex">${escapeHtml(rest)}</p></details>`
+                }
+                return `<p class="no-katex">${escapeHtml(input)}</p>`
+            }]
         }
         const postProcess = (input: string) => postSteps.reduce((acc, fn) => fn(acc), input)
         const content = transformContent(message.content, message.metadata, postProcess)

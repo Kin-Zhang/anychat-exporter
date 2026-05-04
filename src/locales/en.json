@@ -48,5 +48,9 @@
   "Last 100": "Last 100",
   "No results": "No results",
   "Copy Text Attachments": "Copy Text Attachments",
-  "Copy Text Attachments Description": "Include attachment content (e.g. extracted text from uploaded files) when copying text."
+  "Copy Text Attachments Description": "Include attachment content (e.g. extracted text from uploaded files) when copying text.",
+  "User Content Limit": "User Content Limit",
+  "User Content Limit Description": "Per-message character cap for user messages on export. 0 = no limit. Markdown is hard-truncated; HTML keeps the full text inside a collapsed <details> block.",
+  "characters": "characters",
+  "No limit (0 = unlimited)": "No limit (0 = unlimited)"
 }
