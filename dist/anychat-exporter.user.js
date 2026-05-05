@@ -3,7 +3,7 @@
 // @name:zh-CN         AnyChat Exporter
 // @name:zh-TW         AnyChat Exporter
 // @namespace          kin-zhang
-// @version            3.0.1
+// @version            3.1.0
 // @author             kin-zhang
 // @description        Easily export the whole AnyChat conversation history for further analysis or sharing.
 // @description:zh-CN  轻松导出 ChatGPT/Claude/Gemini 聊天记录，以便进一步分析或分享。
