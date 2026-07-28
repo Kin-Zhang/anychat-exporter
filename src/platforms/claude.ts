@@ -196,7 +196,7 @@ export class ClaudeAdapter implements PlatformAdapter {
     // Map Claude's flat message list to the shared ConversationResult format
     private mapToConversationResult(data: ClaudeConversation): ConversationResult {
         const chatMessages = data.chat_messages
-            ?? (data as Record<string, unknown>).messages as ClaudeMessage[] | undefined
+            ?? (data as unknown as Record<string, unknown>).messages as ClaudeMessage[] | undefined
             ?? []
         if (chatMessages.length === 0) {
             console.warn('[Exporter] Claude conversation has no messages. API response keys:', Object.keys(data))
@@ -211,7 +211,7 @@ export class ClaudeAdapter implements PlatformAdapter {
                 message: {
                     id: msg.uuid,
                     author: {
-                        role: (msg.sender === 'human' || (msg as Record<string, unknown>).role === 'user')
+                        role: (msg.sender === 'human' || (msg as unknown as Record<string, unknown>).role === 'user')
                             ? 'user'
                             : 'assistant',
                         metadata: {},
