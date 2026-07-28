@@ -1719,34 +1719,34 @@ html {
     }
     injectUI(getContainer) {
       let injected = false;
+      const applyContainerStyles = (container) => {
+        container.setAttribute("data-exporter-compact", "");
+        container.style.padding = "4px 8px";
+        container.style.width = "100%";
+        container.style.boxSizing = "border-box";
+      };
       const tryInject = () => {
         if (injected) return;
         const navbar = document.querySelector(SELECTORS$1.navbar);
         if (!navbar) return;
         const bottomActions = navbar.querySelector(SELECTORS$1.bottomActions);
         if (bottomActions) {
-          injected = true;
           const container2 = getContainer();
-          container2.setAttribute("data-exporter-compact", "");
-          container2.style.padding = "4px 8px";
-          container2.style.width = "100%";
-          container2.style.boxSizing = "border-box";
-          const anchor = bottomActions.querySelector("ms-updates, ms-api-key-button, ms-settings-menu, button");
-          if (anchor) {
-            bottomActions.insertBefore(container2, anchor);
+          applyContainerStyles(container2);
+          const iconRow = bottomActions.querySelector(":scope > .icon-button-row") ?? bottomActions.querySelector(":scope > .account-switcher-container");
+          if (iconRow) {
+            bottomActions.insertBefore(container2, iconRow);
           } else {
-            bottomActions.prepend(container2);
+            bottomActions.appendChild(container2);
           }
+          injected = true;
           console.warn("[Exporter] Injected into AI Studio sidebar bottom-actions");
           return;
         }
-        injected = true;
         const container = getContainer();
-        container.setAttribute("data-exporter-compact", "");
-        container.style.padding = "4px 8px";
-        container.style.width = "100%";
-        container.style.boxSizing = "border-box";
+        applyContainerStyles(container);
         navbar.appendChild(container);
+        injected = true;
         console.warn("[Exporter] Injected into AI Studio navbar fallback");
       };
       const interval = setInterval(() => {
