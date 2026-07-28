@@ -73,6 +73,13 @@ export class AIStudioAdapter implements PlatformAdapter {
     injectUI(getContainer: () => HTMLElement): void {
         let injected = false
 
+        const applyContainerStyles = (container: HTMLElement) => {
+            container.setAttribute('data-exporter-compact', '')
+            container.style.padding = '4px 8px'
+            container.style.width = '100%'
+            container.style.boxSizing = 'border-box'
+        }
+
         const tryInject = () => {
             if (injected) return
 
@@ -81,31 +88,27 @@ export class AIStudioAdapter implements PlatformAdapter {
 
             const bottomActions = navbar.querySelector<HTMLElement>(SELECTORS.bottomActions)
             if (bottomActions) {
-                injected = true
                 const container = getContainer()
-                container.setAttribute('data-exporter-compact', '')
-                container.style.padding = '4px 8px'
-                container.style.width = '100%'
-                container.style.boxSizing = 'border-box'
-                // Insert before the first interactive button, skipping disclaimer
-                const anchor = bottomActions.querySelector('ms-updates, ms-api-key-button, ms-settings-menu, button')
-                if (anchor) {
-                    bottomActions.insertBefore(container, anchor)
+                applyContainerStyles(container)
+                // The icon-button-row (which wraps ms-updates, ms-settings-menu etc.)
+                // is a direct child of bottom-actions; insert before it.
+                const iconRow = bottomActions.querySelector(':scope > .icon-button-row')
+                    ?? bottomActions.querySelector(':scope > .account-switcher-container')
+                if (iconRow) {
+                    bottomActions.insertBefore(container, iconRow)
                 }
                 else {
-                    bottomActions.prepend(container)
+                    bottomActions.appendChild(container)
                 }
+                injected = true
                 console.warn('[Exporter] Injected into AI Studio sidebar bottom-actions')
                 return
             }
 
-            injected = true
             const container = getContainer()
-            container.setAttribute('data-exporter-compact', '')
-            container.style.padding = '4px 8px'
-            container.style.width = '100%'
-            container.style.boxSizing = 'border-box'
+            applyContainerStyles(container)
             navbar.appendChild(container)
+            injected = true
             console.warn('[Exporter] Injected into AI Studio navbar fallback')
         }
 
