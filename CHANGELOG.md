@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.1](https://github.com/Kin-Zhang/anychat-exporter/compare/userscript-v3.1.0...userscript-v3.1.1) (2026-07-28)
+
+
+### Bug Fixes
+
+* **aistudio:** fix UI injection after sidebar DOM restructure ([#14](https://github.com/Kin-Zhang/anychat-exporter/issues/14)) ([4d731c1](https://github.com/Kin-Zhang/anychat-exporter/commit/4d731c19fd7c2ae5877f1c1c3eb50f05fea8684b))
+
 ## [3.1.0](https://github.com/Kin-Zhang/anychat-exporter/compare/userscript-v3.0.1...userscript-v3.1.0) (2026-05-04)
 
 
