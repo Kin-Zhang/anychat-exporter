@@ -147,13 +147,23 @@ export class ClaudeAdapter implements PlatformAdapter {
         return match ? match[1] : null
     }
 
+    private getOrgIdFromCookie(): string | null {
+        const match = document.cookie.match(/(?:^|;\s*)lastActiveOrg=([^;]+)/)
+        if (!match) return null
+        const value = decodeURIComponent(match[1])
+        return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) ? value : null
+    }
+
     private async getOrgId(): Promise<string> {
         if (this.cachedOrgId) return this.cachedOrgId
 
-        // Uses the existing browser session — no API key required
-        const response = await fetch('https://claude.ai/api/organizations', {
-            credentials: 'include',
-        })
+        const cookieOrgId = this.getOrgIdFromCookie()
+        if (cookieOrgId) {
+            this.cachedOrgId = cookieOrgId
+            return cookieOrgId
+        }
+
+        const response = await this.fetchClaude('/api/organizations')
         if (!response.ok) {
             throw new Error(`[Exporter] Failed to fetch Claude org list: ${response.statusText}`)
         }
@@ -164,11 +174,19 @@ export class ClaudeAdapter implements PlatformAdapter {
         return this.cachedOrgId
     }
 
+    private async fetchClaude(path: string): Promise<Response> {
+        const origin = location.origin
+        const response = await fetch(`${origin}${path}`, { credentials: 'include' })
+        if (response.ok || response.status !== 404) return response
+        // Claude migrated from /api to /edge-api; try the other prefix on 404
+        const altPath = path.startsWith('/api/')
+            ? path.replace('/api/', '/edge-api/')
+            : path.replace('/edge-api/', '/api/')
+        return fetch(`${origin}${altPath}`, { credentials: 'include' })
+    }
+
     private async fetchClaudeConversation(orgId: string, chatId: string): Promise<ClaudeConversation> {
-        const url = `https://claude.ai/api/organizations/${orgId}/chat_conversations/${chatId}`
-        const response = await fetch(url, {
-            credentials: 'include',
-        })
+        const response = await this.fetchClaude(`/api/organizations/${orgId}/chat_conversations/${chatId}`)
         if (!response.ok) {
             throw new Error(`[Exporter] Failed to fetch Claude conversation: ${response.statusText}`)
         }
@@ -177,8 +195,14 @@ export class ClaudeAdapter implements PlatformAdapter {
 
     // Map Claude's flat message list to the shared ConversationResult format
     private mapToConversationResult(data: ClaudeConversation): ConversationResult {
-        const conversationNodes: ConversationNode[] = data.chat_messages.map((msg, i) => {
-            const messages = data.chat_messages
+        const chatMessages = data.chat_messages
+            ?? (data as unknown as Record<string, unknown>).messages as ClaudeMessage[] | undefined
+            ?? []
+        if (chatMessages.length === 0) {
+            console.warn('[Exporter] Claude conversation has no messages. API response keys:', Object.keys(data))
+        }
+        const conversationNodes: ConversationNode[] = chatMessages.map((msg, i) => {
+            const messages = chatMessages
             return {
                 id: msg.uuid,
                 // Link messages as a chain for compatibility with exporter formatters
@@ -187,7 +211,9 @@ export class ClaudeAdapter implements PlatformAdapter {
                 message: {
                     id: msg.uuid,
                     author: {
-                        role: msg.sender === 'human' ? 'user' : 'assistant',
+                        role: (msg.sender === 'human' || (msg as unknown as Record<string, unknown>).role === 'user')
+                            ? 'user'
+                            : 'assistant',
                         metadata: {},
                     },
                     content: {
