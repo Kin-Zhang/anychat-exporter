@@ -103,9 +103,11 @@ export class ClaudeAdapter implements PlatformAdapter {
         const tryInject = () => {
             if (injected) return
 
-            // Claude renders a left nav sidebar - target the innermost scrollable nav
-            // This selector may need updating if Claude changes its DOM structure
-            const nav = document.querySelector<HTMLElement>('nav')
+            // Claude's sidebar is now <aside class="dframe-sidebar" aria-label="Sidebar">
+            // (previously a <nav>). Keep the old selectors as a fallback in case
+            // Claude reverts or A/B tests the change.
+            const nav = document.querySelector<HTMLElement>('aside.dframe-sidebar, aside[aria-label="Sidebar"]')
+                ?? document.querySelector<HTMLElement>('nav')
                 ?? document.querySelector<HTMLElement>('[data-testid="sidebar"]')
 
             if (!nav) return
@@ -113,6 +115,16 @@ export class ClaudeAdapter implements PlatformAdapter {
             injected = true
             const container = getContainer()
             container.style.padding = '8px'
+
+            // Prefer inserting as a sibling of the bottom user-menu tray (a direct
+            // child of the sidebar's flex column), so it renders as a full-width row
+            // right above the account button rather than nesting inside its wrapper.
+            const bottomTray = nav.querySelector<HTMLElement>('.df-bottom-tray')
+            if (bottomTray && bottomTray.parentElement) {
+                bottomTray.parentElement.insertBefore(container, bottomTray)
+                console.warn('[Exporter] Injected into Claude nav', nav)
+                return
+            }
 
             const userMenu = nav.querySelector('[data-testid="user-menu-button"]')
             if (userMenu && userMenu.parentElement) {
