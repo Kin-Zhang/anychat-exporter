@@ -2112,9 +2112,11 @@ ${code2.replace(/\n+$/, "")}
       __publicField(this, "cachedOrgId", null);
     }
     checkIfConversationStarted() {
-      return !!this.getChatIdFromUrl();
+      return !!this.getChatIdFromUrl() || !!this.getCodeSessionIdFromUrl();
     }
     async fetchCurrentConversation() {
+      const codeSessionId = this.getCodeSessionIdFromUrl();
+      if (codeSessionId) return this.fetchCodeSessionConversation(codeSessionId);
       const chatId = this.getChatIdFromUrl();
       if (!chatId) throw new Error("[Exporter] No Claude chat ID found in URL");
       const orgId = await this.getOrgId();
@@ -2122,6 +2124,8 @@ ${code2.replace(/\n+$/, "")}
       return this.mapToConversationResult(data);
     }
     async fetchRawData() {
+      const codeSessionId = this.getCodeSessionIdFromUrl();
+      if (codeSessionId) return this.fetchCodeSessionConversation(codeSessionId);
       const chatId = this.getChatIdFromUrl();
       if (!chatId) throw new Error("[Exporter] No Claude chat ID found in URL");
       const orgId = await this.getOrgId();
@@ -2179,6 +2183,10 @@ ${code2.replace(/\n+$/, "")}
     // --- Private helpers ---
     getChatIdFromUrl() {
       const match = location.pathname.match(/\/chat\/([a-z0-9-]+)/i);
+      return match ? match[1] : null;
+    }
+    getCodeSessionIdFromUrl() {
+      const match = location.pathname.match(/\/code\/(session_[a-z0-9]+)/i);
       return match ? match[1] : null;
     }
     getOrgIdFromCookie() {
@@ -2335,6 +2343,222 @@ ${json}
       if (slug.includes("sonnet")) return "Claude Sonnet";
       if (slug.includes("haiku")) return "Claude Haiku";
       return "Claude";
+    }
+    // --- Claude Code session support (text-only) ---
+    //
+    // Claude Code sessions (claude.ai/code/session_{id}) render an agentic
+    // transcript, not a plain chat, and have no equivalent chat_conversations
+    // API endpoint we can reach client-side. We extract turns from the DOM
+    // instead: prose is recovered from each turn's markdown blocks, while
+    // tool-call cards (bash commands, file edits, job monitors) are skipped —
+    // their detail isn't in the DOM until expanded, so only a placeholder
+    // line survives.
+    async fetchCodeSessionConversation(sessionId) {
+      const title2 = this.extractCodeSessionTitle();
+      const nodes = await this.extractCodeSessionMessagesFromDOM();
+      if (nodes.length === 0) {
+        throw new Error("[Exporter] No messages found on Claude Code session page. The page may still be loading.");
+      }
+      return {
+        id: sessionId,
+        title: title2,
+        model: "Claude Code",
+        modelSlug: "claude-code",
+        createTime: Date.now() / 1e3,
+        updateTime: Date.now() / 1e3,
+        conversationNodes: nodes
+      };
+    }
+    extractCodeSessionTitle() {
+      return document.title.replace(/\s*[-|].*$/, "").trim() || "Claude Code Session";
+    }
+    async extractCodeSessionMessagesFromDOM() {
+      const collected = /* @__PURE__ */ new Map();
+      const collectVisible = () => {
+        const articles = Array.from(
+          document.querySelectorAll('[role="article"][aria-posinset]')
+        );
+        for (const article of articles) {
+          const posinset = Number(article.getAttribute("aria-posinset"));
+          if (!posinset || collected.has(posinset)) continue;
+          const entry = article.querySelector("[data-epitaxy-entry]");
+          const id = (entry == null ? void 0 : entry.getAttribute("data-epitaxy-entry")) ?? `code-turn-${posinset}`;
+          const userTurn = article.querySelector(".epitaxy-user-turn");
+          if (userTurn) {
+            const text22 = this.codeSessionHtmlToMarkdown(userTurn);
+            if (text22) collected.set(posinset, { role: "user", id, text: text22 });
+            continue;
+          }
+          const mdBlocks = Array.from(article.querySelectorAll(".epitaxy-markdown"));
+          const text2 = mdBlocks.map((block) => this.codeSessionHtmlToMarkdown(block)).filter((t2) => t2).join("\n\n");
+          if (text2) collected.set(posinset, { role: "assistant", id, text: text2 });
+        }
+      };
+      const scroller = document.querySelector('[data-testid="epitaxy-virtual-transcript"]');
+      if (scroller) {
+        scroller.scrollTop = 0;
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        collectVisible();
+        let lastScrollTop = -1;
+        let stableCount = 0;
+        for (let i2 = 0; i2 < 200 && stableCount < 3; i2++) {
+          scroller.scrollTop += scroller.clientHeight * 0.8;
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          collectVisible();
+          if (scroller.scrollTop === lastScrollTop) {
+            stableCount += 1;
+          } else {
+            stableCount = 0;
+            lastScrollTop = scroller.scrollTop;
+          }
+          if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2) break;
+        }
+      } else {
+        collectVisible();
+      }
+      const ordered = Array.from(collected.keys()).sort((a2, b2) => a2 - b2).map((k2) => collected.get(k2));
+      return ordered.map((turn, i2) => ({
+        id: turn.id,
+        parent: i2 === 0 ? void 0 : ordered[i2 - 1].id,
+        children: i2 < ordered.length - 1 ? [ordered[i2 + 1].id] : [],
+        message: {
+          id: turn.id,
+          author: { role: turn.role, metadata: {} },
+          content: { content_type: "text", parts: [turn.text] },
+          create_time: Date.now() / 1e3,
+          update_time: Date.now() / 1e3,
+          status: "finished_successfully",
+          recipient: "all",
+          weight: 1
+        }
+      }));
+    }
+    // Minimal HTML -> Markdown conversion for Claude Code's transcript prose.
+    // Elements marked data-find-omitted are Claude's own "hide from find-in-page /
+    // screen reader summary" markers — they duplicate visible text or are pure UI
+    // chrome (message-action toolbars), so we skip them entirely.
+    codeSessionHtmlToMarkdown(root2) {
+      function renderChildren(el) {
+        let out2 = "";
+        for (const child of Array.from(el.childNodes)) out2 += render(child);
+        return out2;
+      }
+      function render(node2) {
+        if (node2.nodeType === Node.TEXT_NODE) return node2.textContent ?? "";
+        if (node2.nodeType !== Node.ELEMENT_NODE) return "";
+        const el = node2;
+        if (el.hasAttribute("data-find-omitted")) return "";
+        const tag = el.tagName;
+        switch (tag) {
+          case "P":
+            return `
+
+${renderChildren(el).trim()}
+
+`;
+          case "BR":
+            return "\n";
+          case "STRONG":
+          case "B":
+            return `**${renderChildren(el)}**`;
+          case "EM":
+          case "I":
+            return `*${renderChildren(el)}*`;
+          case "CODE":
+            return `\`${el.textContent ?? ""}\``;
+          case "A": {
+            const href = el.getAttribute("href") ?? "";
+            const text2 = renderChildren(el);
+            return href ? `[${text2}](${href})` : text2;
+          }
+          case "H1":
+            return `
+
+# ${renderChildren(el).trim()}
+
+`;
+          case "H2":
+            return `
+
+## ${renderChildren(el).trim()}
+
+`;
+          case "H3":
+            return `
+
+### ${renderChildren(el).trim()}
+
+`;
+          case "H4":
+            return `
+
+#### ${renderChildren(el).trim()}
+
+`;
+          case "H5":
+            return `
+
+##### ${renderChildren(el).trim()}
+
+`;
+          case "H6":
+            return `
+
+###### ${renderChildren(el).trim()}
+
+`;
+          case "HR":
+            return "\n\n---\n\n";
+          case "BLOCKQUOTE": {
+            const inner = renderChildren(el).trim();
+            if (!inner) return "";
+            const quoted = inner.split("\n").map((l2) => l2 ? `> ${l2}` : ">").join("\n");
+            return `
+
+${quoted}
+
+`;
+          }
+          case "UL":
+          case "OL": {
+            const ordered = tag === "OL";
+            const items = [];
+            let index2 = 0;
+            for (const child of Array.from(el.children)) {
+              if (child.tagName !== "LI") continue;
+              index2 += 1;
+              const prefix = ordered ? `${index2}. ` : "- ";
+              const inner = renderChildren(child).trim();
+              const lines = inner.split("\n");
+              const first = lines.shift() ?? "";
+              const rest = lines.map((l2) => l2 ? `  ${l2}` : "").join("\n");
+              items.push(`${prefix}${first}${rest ? `
+${rest}` : ""}`);
+            }
+            return `
+
+${items.join("\n")}
+
+`;
+          }
+          case "LI":
+            return renderChildren(el);
+          case "PRE": {
+            const code2 = el.textContent ?? "";
+            return `
+
+\`\`\`
+${code2.replace(/\n+$/, "")}
+\`\`\`
+
+`;
+          }
+          default:
+            return renderChildren(el);
+        }
+      }
+      const out = render(root2);
+      return out.replace(/\n{3,}/g, "\n\n").trim();
     }
   }
   const defaultAvatar = "data:image/svg+xml,%3Csvg%20stroke%3D%22currentColor%22%20fill%3D%22none%22%20stroke-width%3D%221.5%22%20viewBox%3D%22-6%20-6%2036%2036%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20style%3D%22color%3A%20white%3B%20background%3A%20%234285f4%3B%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M20%2021v-2a4%204%200%200%200-4-4H8a4%204%200%200%200-4%204v2%22%3E%3C%2Fpath%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%227%22%20r%3D%224%22%3E%3C%2Fcircle%3E%3C%2Fsvg%3E";

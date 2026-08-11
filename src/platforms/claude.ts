@@ -57,11 +57,14 @@ export class ClaudeAdapter implements PlatformAdapter {
     private cachedOrgId: string | null = null
 
     checkIfConversationStarted(): boolean {
-        // We are in a chat if the URL contains /chat/{uuid}
-        return !!this.getChatIdFromUrl()
+        // We are in a chat if the URL contains /chat/{uuid} or /code/{session_id}
+        return !!this.getChatIdFromUrl() || !!this.getCodeSessionIdFromUrl()
     }
 
     async fetchCurrentConversation(): Promise<ConversationResult> {
+        const codeSessionId = this.getCodeSessionIdFromUrl()
+        if (codeSessionId) return this.fetchCodeSessionConversation(codeSessionId)
+
         const chatId = this.getChatIdFromUrl()
         if (!chatId) throw new Error('[Exporter] No Claude chat ID found in URL')
 
@@ -71,6 +74,9 @@ export class ClaudeAdapter implements PlatformAdapter {
     }
 
     async fetchRawData(): Promise<unknown> {
+        const codeSessionId = this.getCodeSessionIdFromUrl()
+        if (codeSessionId) return this.fetchCodeSessionConversation(codeSessionId)
+
         const chatId = this.getChatIdFromUrl()
         if (!chatId) throw new Error('[Exporter] No Claude chat ID found in URL')
 
@@ -156,6 +162,12 @@ export class ClaudeAdapter implements PlatformAdapter {
     private getChatIdFromUrl(): string | null {
         // Claude URL format: claude.ai/chat/{uuid}
         const match = location.pathname.match(/\/chat\/([a-z0-9-]+)/i)
+        return match ? match[1] : null
+    }
+
+    private getCodeSessionIdFromUrl(): string | null {
+        // Claude Code session URL format: claude.ai/code/session_{id}
+        const match = location.pathname.match(/\/code\/(session_[a-z0-9]+)/i)
         return match ? match[1] : null
     }
 
@@ -347,5 +359,194 @@ export class ClaudeAdapter implements PlatformAdapter {
         if (slug.includes('sonnet')) return 'Claude Sonnet'
         if (slug.includes('haiku')) return 'Claude Haiku'
         return 'Claude'
+    }
+
+    // --- Claude Code session support (text-only) ---
+    //
+    // Claude Code sessions (claude.ai/code/session_{id}) render an agentic
+    // transcript, not a plain chat, and have no equivalent chat_conversations
+    // API endpoint we can reach client-side. We extract turns from the DOM
+    // instead: prose is recovered from each turn's markdown blocks, while
+    // tool-call cards (bash commands, file edits, job monitors) are skipped —
+    // their detail isn't in the DOM until expanded, so only a placeholder
+    // line survives.
+
+    private async fetchCodeSessionConversation(sessionId: string): Promise<ConversationResult> {
+        const title = this.extractCodeSessionTitle()
+        const nodes = await this.extractCodeSessionMessagesFromDOM()
+
+        if (nodes.length === 0) {
+            throw new Error('[Exporter] No messages found on Claude Code session page. The page may still be loading.')
+        }
+
+        return {
+            id: sessionId,
+            title,
+            model: 'Claude Code',
+            modelSlug: 'claude-code',
+            createTime: Date.now() / 1000,
+            updateTime: Date.now() / 1000,
+            conversationNodes: nodes,
+        }
+    }
+
+    private extractCodeSessionTitle(): string {
+        return document.title.replace(/\s*[-|].*$/, '').trim() || 'Claude Code Session'
+    }
+
+    private async extractCodeSessionMessagesFromDOM(): Promise<ConversationNode[]> {
+        interface Turn { role: 'user' | 'assistant'; id: string; text: string }
+        const collected = new Map<number, Turn>()
+
+        const collectVisible = () => {
+            const articles = Array.from(
+                document.querySelectorAll<HTMLElement>('[role="article"][aria-posinset]'),
+            )
+            for (const article of articles) {
+                const posinset = Number(article.getAttribute('aria-posinset'))
+                if (!posinset || collected.has(posinset)) continue
+
+                const entry = article.querySelector<HTMLElement>('[data-epitaxy-entry]')
+                const id = entry?.getAttribute('data-epitaxy-entry') ?? `code-turn-${posinset}`
+
+                const userTurn = article.querySelector<HTMLElement>('.epitaxy-user-turn')
+                if (userTurn) {
+                    const text = this.codeSessionHtmlToMarkdown(userTurn)
+                    if (text) collected.set(posinset, { role: 'user', id, text })
+                    continue
+                }
+
+                const mdBlocks = Array.from(article.querySelectorAll<HTMLElement>('.epitaxy-markdown'))
+                const text = mdBlocks
+                    .map(block => this.codeSessionHtmlToMarkdown(block))
+                    .filter(t => t)
+                    .join('\n\n')
+                if (text) collected.set(posinset, { role: 'assistant', id, text })
+            }
+        }
+
+        // The transcript is virtualized (turns outside the viewport aren't in the
+        // DOM at all), so scroll from top to bottom collecting turns as they render.
+        const scroller = document.querySelector<HTMLElement>('[data-testid="epitaxy-virtual-transcript"]')
+        if (scroller) {
+            scroller.scrollTop = 0
+            await new Promise<void>(resolve => setTimeout(resolve, 150))
+            collectVisible()
+
+            let lastScrollTop = -1
+            let stableCount = 0
+            for (let i = 0; i < 200 && stableCount < 3; i++) {
+                scroller.scrollTop += scroller.clientHeight * 0.8
+                await new Promise<void>(resolve => setTimeout(resolve, 150))
+                collectVisible()
+
+                if (scroller.scrollTop === lastScrollTop) {
+                    stableCount += 1
+                }
+                else {
+                    stableCount = 0
+                    lastScrollTop = scroller.scrollTop
+                }
+
+                if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2) break
+            }
+        }
+        else {
+            collectVisible()
+        }
+
+        const ordered = Array.from(collected.keys())
+            .sort((a, b) => a - b)
+            .map(k => collected.get(k)!)
+
+        return ordered.map((turn, i) => ({
+            id: turn.id,
+            parent: i === 0 ? undefined : ordered[i - 1].id,
+            children: i < ordered.length - 1 ? [ordered[i + 1].id] : [],
+            message: {
+                id: turn.id,
+                author: { role: turn.role, metadata: {} },
+                content: { content_type: 'text', parts: [turn.text] },
+                create_time: Date.now() / 1000,
+                update_time: Date.now() / 1000,
+                status: 'finished_successfully',
+                recipient: 'all',
+                weight: 1,
+            },
+        }))
+    }
+
+    // Minimal HTML -> Markdown conversion for Claude Code's transcript prose.
+    // Elements marked data-find-omitted are Claude's own "hide from find-in-page /
+    // screen reader summary" markers — they duplicate visible text or are pure UI
+    // chrome (message-action toolbars), so we skip them entirely.
+    private codeSessionHtmlToMarkdown(root: Element): string {
+        function renderChildren(el: Node): string {
+            let out = ''
+            for (const child of Array.from(el.childNodes)) out += render(child)
+            return out
+        }
+
+        function render(node: Node): string {
+            if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ''
+            if (node.nodeType !== Node.ELEMENT_NODE) return ''
+            const el = node as Element
+            if (el.hasAttribute('data-find-omitted')) return ''
+            const tag = el.tagName
+
+            switch (tag) {
+                case 'P': return `\n\n${renderChildren(el).trim()}\n\n`
+                case 'BR': return '\n'
+                case 'STRONG':
+                case 'B': return `**${renderChildren(el)}**`
+                case 'EM':
+                case 'I': return `*${renderChildren(el)}*`
+                case 'CODE': return `\`${el.textContent ?? ''}\``
+                case 'A': {
+                    const href = el.getAttribute('href') ?? ''
+                    const text = renderChildren(el)
+                    return href ? `[${text}](${href})` : text
+                }
+                case 'H1': return `\n\n# ${renderChildren(el).trim()}\n\n`
+                case 'H2': return `\n\n## ${renderChildren(el).trim()}\n\n`
+                case 'H3': return `\n\n### ${renderChildren(el).trim()}\n\n`
+                case 'H4': return `\n\n#### ${renderChildren(el).trim()}\n\n`
+                case 'H5': return `\n\n##### ${renderChildren(el).trim()}\n\n`
+                case 'H6': return `\n\n###### ${renderChildren(el).trim()}\n\n`
+                case 'HR': return '\n\n---\n\n'
+                case 'BLOCKQUOTE': {
+                    const inner = renderChildren(el).trim()
+                    if (!inner) return ''
+                    const quoted = inner.split('\n').map(l => l ? `> ${l}` : '>').join('\n')
+                    return `\n\n${quoted}\n\n`
+                }
+                case 'UL':
+                case 'OL': {
+                    const ordered = tag === 'OL'
+                    const items: string[] = []
+                    let index = 0
+                    for (const child of Array.from(el.children)) {
+                        if (child.tagName !== 'LI') continue
+                        index += 1
+                        const prefix = ordered ? `${index}. ` : '- '
+                        const inner = renderChildren(child).trim()
+                        const lines = inner.split('\n')
+                        const first = lines.shift() ?? ''
+                        const rest = lines.map(l => l ? `  ${l}` : '').join('\n')
+                        items.push(`${prefix}${first}${rest ? `\n${rest}` : ''}`)
+                    }
+                    return `\n\n${items.join('\n')}\n\n`
+                }
+                case 'LI': return renderChildren(el)
+                case 'PRE': {
+                    const code = el.textContent ?? ''
+                    return `\n\n\`\`\`\n${code.replace(/\n+$/, '')}\n\`\`\`\n\n`
+                }
+                default: return renderChildren(el)
+            }
+        }
+
+        const out = render(root)
+        return out.replace(/\n{3,}/g, '\n\n').trim()
     }
 }
